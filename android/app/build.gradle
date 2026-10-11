@@ -84,6 +84,12 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Cafe Bazaar in-app billing public RSA key (developer panel → In-app billing).
+        // Set BAZAAR_RSA_KEY in android/gradle.properties or ~/.gradle/gradle.properties.
+        buildConfigField "String", "BAZAAR_RSA_KEY", "\"${project.findProperty('BAZAAR_RSA_KEY') ?: ''}\""
+    }
+    buildFeatures {
+        buildConfig true
     }
     signingConfigs {
         debug {
@@ -110,6 +116,9 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation("com.github.cafebazaar.Poolakey:poolakey:2.2.0")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-ktx:1.9.3")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

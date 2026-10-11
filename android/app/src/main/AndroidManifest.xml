@@ -1,6 +1,43 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Debug: Metro. Release: only Bazaar billing (bound service, no own network requests). -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- F05: which app is in front -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- F06: lock overlay -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- F05: lock service during a session -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- F16 (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- F05/F13: resume the session and re-register alarms after reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- F02: battery optimization exemption request -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- F13: on-time schedule starts (Android 12+, user-granted) -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- F15 -->
+    <uses-permission android:name="com.farsitel.bazaar.permission.PAY_THROUGH_BAZAAR" />
+
+    <queries>
+        <!-- F03: list launchable apps without QUERY_ALL_PACKAGES -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- never-block list: launchers -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+        <package android:name="com.farsitel.bazaar" />
+    </queries>
 
     <application
       android:name=".MainApplication"
@@ -22,6 +59,73 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
+        <!-- tamarkoz://session, tamarkoz://start … from notifications, the lock screen and the widget -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="tamarkoz" />
+        </intent-filter>
       </activity>
+
+      <service
+        android:name=".focus.FocusService"
+        android:exported="false"
+        android:foregroundServiceType="specialUse">
+        <property
+            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+            android:value="Blocks user-chosen distracting apps during a study session the user started" />
+      </service>
+
+      <receiver
+        android:name=".focus.AlarmReceiver"
+        android:exported="false" />
+
+      <receiver
+        android:name=".focus.SystemEventsReceiver"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            <action android:name="android.intent.action.TIME_SET" />
+            <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+        </intent-filter>
+      </receiver>
+
+      <receiver
+        android:name=".focus.StudyWidget"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent-filter>
+        <meta-data
+            android:name="android.appwidget.provider"
+            android:resource="@xml/study_widget_info" />
+      </receiver>
+
+      <receiver
+        android:name=".focus.AdminReceiver"
+        android:description="@string/admin_description"
+        android:label="@string/admin_label"
+        android:exported="true"
+        android:permission="android.permission.BIND_DEVICE_ADMIN">
+        <meta-data
+            android:name="android.app.device_admin"
+            android:resource="@xml/device_admin" />
+        <intent-filter>
+            <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+        </intent-filter>
+      </receiver>
+
+      <provider
+        android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.files"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+      </provider>
     </application>
 </manifest>

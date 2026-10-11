@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- F27: no policies are used; being an active admin is what makes uninstalling harder. -->
+<device-admin>
+    <uses-policies />
+</device-admin>
