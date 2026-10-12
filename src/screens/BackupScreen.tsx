@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+
 import { AppText } from '../components/AppText';
 import { Screen } from '../components/Screen';
 import { Banner, Button, Card } from '../components/ui';
@@ -8,6 +8,7 @@ import { exportBackup, importBackup, parseBackup } from '../services/backup';
 import { useApp } from '../state/AppContext';
 import { dayKey } from '../utils/jalali';
 import { toFaDigits } from '../utils/digits';
+import { showAlert } from '../components/Dialog';
 
 /** F25: back up to a file and restore from it (e.g. when changing phones). */
 export function BackupScreen() {
@@ -19,9 +20,9 @@ export function BackupScreen() {
     try {
       const content = await exportBackup();
       const ok = await focus.exportBackup(`tamarkoz-backup-${dayKey(Date.now())}.json`, content);
-      if (ok) Alert.alert('ذخیره شد', 'فایل پشتیبان ساخته شد. آن را به گوشی تازه منتقل کن.');
+      if (ok) showAlert('ذخیره شد', 'فایل پشتیبان ساخته شد. آن را به گوشی تازه منتقل کن.');
     } catch {
-      Alert.alert('خطا', 'فایل پشتیبان ساخته نشد.');
+      showAlert('خطا', 'فایل پشتیبان ساخته نشد.');
     } finally {
       setBusy(null);
     }
@@ -36,7 +37,7 @@ export function BackupScreen() {
       try {
         backup = parseBackup(text);
       } catch (e) {
-        Alert.alert(
+        showAlert(
           'فایل نامعتبر',
           (e as Error).message === 'newer_version'
             ? 'این فایل با نسخه‌ی تازه‌تری از اپ ساخته شده. اول اپ را به‌روز کن.'
@@ -45,7 +46,7 @@ export function BackupScreen() {
         return;
       }
       const n = backup.tables.sessions.length;
-      Alert.alert(
+      showAlert(
         'جایگزین کردن داده‌ها؟',
         `همه‌ی داده‌های فعلی این گوشی با فایل پشتیبان (${toFaDigits(n)} جلسه) جایگزین می‌شود.`,
         [
@@ -56,13 +57,13 @@ export function BackupScreen() {
             onPress: async () => {
               await importBackup(backup);
               await reloadAll();
-              Alert.alert('انجام شد', 'داده‌ها برگشتند. خریدت را از «بازیابی خرید» برگردان.');
+              showAlert('انجام شد', 'داده‌ها برگشتند. خریدت را از «بازیابی خرید» برگردان.');
             },
           },
         ],
       );
     } catch {
-      Alert.alert('خطا', 'فایل خوانده نشد.');
+      showAlert('خطا', 'فایل خوانده نشد.');
     } finally {
       setBusy(null);
     }

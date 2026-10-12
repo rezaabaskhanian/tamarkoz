@@ -17,7 +17,7 @@ import { formatJalaliDate, toJalali } from '../utils/jalali';
 const INTRO: { icon: IconName; tag: string; title: string; text: string }[] = [
   {
     icon: 'lock',
-    tag: 'بدون تبلیغ · بدون حساب کاربری',
+    tag: '۷ روز همه‌ی امکانات رایگان',
     title: 'کنکور، میدان تمرکز عمیق است',
     text: 'در زمان مطالعه اینستاگرام و تلگرام و بازی‌ها قفل می‌شوند. تماس و پیامک همیشه بازند.',
   },

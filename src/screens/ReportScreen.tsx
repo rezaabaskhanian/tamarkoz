@@ -1,15 +1,29 @@
 import { useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useDataQuery, usePaywall } from '../app/hooks';
 import { useNav } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
 import { BarChart, SubjectBars } from '../components/Charts';
 import { Icon } from '../components/Icon';
 import { Screen } from '../components/Screen';
-import { Button, Card, PremiumBadge, Row, Segmented, SubjectDot } from '../components/ui';
-import { deleteSession } from '../db/sessions';
+import {
+  Button,
+  Card,
+  PremiumBadge,
+  Row,
+  Segmented,
+  SubjectDot,
+} from '../components/ui';
+import { activityInfo } from '../activities';
+import { activitiesBetween, deleteSession } from '../db/sessions';
+import { kindLabel } from '../db/topics';
 import { focus } from '../native/focus';
-import { monthlyReport, subjectTrend, weeklyReport, type PeriodReport } from '../services/reports';
+import {
+  monthlyReport,
+  subjectTrend,
+  weeklyReport,
+  type PeriodReport,
+} from '../services/reports';
 import { shareReportPdf } from '../services/reportPdf';
 import { useApp } from '../state/AppContext';
 import { makeStyles, radius, spacing, useTheme } from '../theme';
@@ -21,6 +35,7 @@ import {
   toJalali,
   weekdayIndex,
 } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
 
 const SHORT_DAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
 
@@ -40,7 +55,11 @@ export function ReportScreen() {
         ]}
       />
       {isPremium ? (
-        tab === 'week' ? <Weekly /> : <Monthly />
+        tab === 'week' ? (
+          <Weekly />
+        ) : (
+          <Monthly />
+        )
       ) : (
         <LockedSample onBuy={() => paywall('report')} />
       )}
@@ -57,18 +76,30 @@ function Weekly() {
   return (
     <>
       <PeriodNav
-        label={`${formatJalaliDayMonth(r.from)} تا ${formatJalaliDayMonth(addDays(r.to, -1))}`}
+        label={`${formatJalaliDayMonth(r.from)} تا ${formatJalaliDayMonth(
+          addDays(r.to, -1),
+        )}`}
         onPrev={() => setOffset(offset - 1)}
         onNext={offset < 0 ? () => setOffset(offset + 1) : undefined}
       />
       <Totals r={r} prevLabel="هفته‌ی قبل" />
       <Card>
         <AppText weight="bold">هر روز</AppText>
-        <BarChart values={r.perDay} labels={SHORT_DAYS} highlight={offset === 0 ? today : undefined} />
+        <BarChart
+          values={r.perDay}
+          labels={SHORT_DAYS}
+          highlight={offset === 0 ? today : undefined}
+        />
       </Card>
       <Details r={r} />
       <Row>
-        <Button title="ثبت دستی" icon="add" variant="secondary" style={{ flex: 1 }} onPress={() => nav.navigate('ManualLog')} />
+        <Button
+          title="ثبت دستی"
+          icon="add"
+          variant="secondary"
+          style={{ flex: 1 }}
+          onPress={() => nav.navigate('ManualLog')}
+        />
         <Button
           title="اشتراک‌گذاری"
           icon="share"
@@ -79,12 +110,15 @@ function Weekly() {
             focus.shareCard({
               title: 'مطالعه‌ی این هفته',
               value: formatDurationFa(Math.round(r.total / 60)),
-              subtitle: `${formatJalaliDayMonth(r.from)} تا ${formatJalaliDayMonth(addDays(r.to, -1))}`,
+              subtitle: `${formatJalaliDayMonth(
+                r.from,
+              )} تا ${formatJalaliDayMonth(addDays(r.to, -1))}`,
               detail: `${toFaDigits(r.completed)} جلسه‌ی کامل`,
             })
           }
         />
       </Row>
+      <OtherActivities from={r.from} to={r.to} />
       <PdfButton r={r} kind="week" />
       <SessionList r={r} />
     </>
@@ -98,8 +132,14 @@ function Monthly() {
   const { colors } = useTheme();
   if (!r) return null;
   const isCurrent = ym.jy === now.jy && ym.jm === now.jm;
-  const prev = () => setYm(ym.jm === 1 ? { jy: ym.jy - 1, jm: 12 } : { jy: ym.jy, jm: ym.jm - 1 });
-  const next = () => setYm(ym.jm === 12 ? { jy: ym.jy + 1, jm: 1 } : { jy: ym.jy, jm: ym.jm + 1 });
+  const prev = () =>
+    setYm(
+      ym.jm === 1 ? { jy: ym.jy - 1, jm: 12 } : { jy: ym.jy, jm: ym.jm - 1 },
+    );
+  const next = () =>
+    setYm(
+      ym.jm === 12 ? { jy: ym.jy + 1, jm: 1 } : { jy: ym.jy, jm: ym.jm + 1 },
+    );
   const trend = subjectTrend(r);
   const maxWeek = Math.max(1, ...trend.flatMap(t => t.weeks));
   return (
@@ -114,7 +154,11 @@ function Monthly() {
         <AppText weight="bold">هر روز</AppText>
         <BarChart
           values={r.perDay.slice(0, r.days)}
-          labels={r.perDay.slice(0, r.days).map((_, i) => ((i + 1) % 5 === 0 || i === 0 ? toFaDigits(i + 1) : ''))}
+          labels={r.perDay
+            .slice(0, r.days)
+            .map((_, i) =>
+              (i + 1) % 5 === 0 || i === 0 ? toFaDigits(i + 1) : '',
+            )}
           highlight={isCurrent ? now.jd - 1 : undefined}
           height={120}
         />
@@ -146,8 +190,51 @@ function Monthly() {
         </Card>
       )}
       <Details r={r} />
+      <OtherActivities from={r.from} to={r.to} />
       <PdfButton r={r} kind="month" />
     </>
+  );
+}
+
+/** Time spent in non-study activities (sleep, deep work…) — reported apart from study time. */
+function OtherActivities({ from, to }: { from: number; to: number }) {
+  const rows = useDataQuery(() => activitiesBetween(from, to), [from, to]);
+  if (!rows || rows.length === 0) return null;
+  return (
+    <Card>
+      <AppText weight="bold">حالت‌های دیگر (بدون گوشی)</AppText>
+      <AppText variant="caption" muted>
+        این‌ها در ساعت مطالعه حساب نمی‌شوند.
+      </AppText>
+      {rows.map(x => {
+        const a = activityInfo(x.activity, x.activity_name);
+        return (
+          <Row key={x.activity} gap={spacing.md}>
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 12,
+                backgroundColor: a.color + '1A',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon name={a.icon} size={18} color={a.color} />
+            </View>
+            <AppText weight="medium" style={{ flex: 1 }}>
+              {a.label}
+            </AppText>
+            <AppText variant="caption" muted>
+              {toFaDigits(x.n)} جلسه
+            </AppText>
+            <AppText weight="bold">
+              {formatDurationFa(Math.round(x.sec / 60))}
+            </AppText>
+          </Row>
+        );
+      })}
+    </Card>
   );
 }
 
@@ -166,7 +253,7 @@ function PdfButton({ r, kind }: { r: PeriodReport; kind: 'week' | 'month' }) {
         try {
           await shareReportPdf(r, kind, settings);
         } catch {
-          Alert.alert('خطا', 'فایل PDF ساخته نشد.');
+          showAlert('خطا', 'فایل PDF ساخته نشد.');
         } finally {
           setBusy(false);
         }
@@ -175,7 +262,15 @@ function PdfButton({ r, kind }: { r: PeriodReport; kind: 'week' | 'month' }) {
   );
 }
 
-function PeriodNav({ label, onPrev, onNext }: { label: string; onPrev: () => void; onNext?: () => void }) {
+function PeriodNav({
+  label,
+  onPrev,
+  onNext,
+}: {
+  label: string;
+  onPrev: () => void;
+  onNext?: () => void;
+}) {
   const { colors } = useTheme();
   return (
     <Row style={{ justifyContent: 'space-between' }}>
@@ -183,7 +278,13 @@ function PeriodNav({ label, onPrev, onNext }: { label: string; onPrev: () => voi
         <Icon name="back" color={colors.primary} />
       </Pressable>
       <AppText weight="bold">{label}</AppText>
-      <Pressable onPress={onNext} disabled={!onNext} hitSlop={12} accessibilityLabel="دوره‌ی بعد" style={{ opacity: onNext ? 1 : 0.25 }}>
+      <Pressable
+        onPress={onNext}
+        disabled={!onNext}
+        hitSlop={12}
+        accessibilityLabel="دوره‌ی بعد"
+        style={{ opacity: onNext ? 1 : 0.25 }}
+      >
         <View style={{ transform: [{ scaleX: -1 }] }}>
           <Icon name="back" color={colors.primary} />
         </View>
@@ -199,10 +300,16 @@ function Totals({ r, prevLabel }: { r: PeriodReport; prevLabel: string }) {
       <AppText muted variant="caption">
         مجموع مطالعه
       </AppText>
-      <AppText variant="title">{formatDurationFa(Math.round(r.total / 60))}</AppText>
+      <AppText variant="title">
+        {formatDurationFa(Math.round(r.total / 60))}
+      </AppText>
       {r.change != null ? (
-        <AppText variant="caption" color={r.change >= 0 ? colors.success : colors.danger}>
-          {r.change >= 0 ? '▲' : '▼'} {toFaDigits(Math.abs(r.change))}٪ نسبت به {prevLabel}
+        <AppText
+          variant="caption"
+          color={r.change >= 0 ? colors.success : colors.danger}
+        >
+          {r.change >= 0 ? '▲' : '▼'} {toFaDigits(Math.abs(r.change))}٪ نسبت به{' '}
+          {prevLabel}
         </AppText>
       ) : (
         <AppText variant="caption" muted>
@@ -250,7 +357,7 @@ function SessionList({ r }: { r: PeriodReport }) {
   const s = useStyles();
   if (r.sessions.length === 0) return null;
   const confirmDelete = (id: number) =>
-    Alert.alert('حذف ثبت دستی؟', '', [
+    showAlert('حذف ثبت دستی؟', '', [
       { text: 'نه', style: 'cancel' },
       {
         text: 'حذف',
@@ -268,14 +375,23 @@ function SessionList({ r }: { r: PeriodReport }) {
         <Pressable
           key={x.id}
           style={s.session}
-          onLongPress={x.source === 'manual_log' ? () => confirmDelete(x.id) : undefined}
+          onLongPress={
+            x.source === 'manual_log' ? () => confirmDelete(x.id) : undefined
+          }
         >
           <SubjectDot color={x.subject_color} />
           <View style={{ flex: 1 }}>
-            <AppText>{x.subject_name}</AppText>
+            <AppText>
+              {x.subject_name}
+              {x.topic ? ` · ${x.topic}` : ''}
+            </AppText>
             <AppText variant="caption" muted>
-              {formatJalaliDayMonth(x.started_at)}
-              {x.end_reason && x.end_reason !== 'completed' && x.source !== 'manual_log' ? ' · ناتمام' : ''}
+              {formatJalaliDayMonth(x.started_at)} · {kindLabel(x.kind)}
+              {x.end_reason &&
+              x.end_reason !== 'completed' &&
+              x.source !== 'manual_log'
+                ? ' · ناتمام'
+                : ''}
               {x.tests_count ? ` · ${toFaDigits(x.tests_count)} تست` : ''}
             </AppText>
           </View>
@@ -286,7 +402,9 @@ function SessionList({ r }: { r: PeriodReport }) {
               </AppText>
             </View>
           )}
-          <AppText weight="medium">{formatDurationFa(Math.round(x.actual_seconds / 60))}</AppText>
+          <AppText weight="medium">
+            {formatDurationFa(Math.round(x.actual_seconds / 60))}
+          </AppText>
         </Pressable>
       ))}
       <AppText variant="caption" muted>
@@ -302,7 +420,11 @@ function LockedSample({ onBuy }: { onBuy: () => void }) {
   const s = useStyles();
   return (
     <View>
-      <View style={s.dim} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+      <View
+        style={s.dim}
+        pointerEvents="none"
+        importantForAccessibility="no-hide-descendants"
+      >
         <Card>
           <AppText variant="title">۲۸ ساعت و ۴۰ دقیقه</AppText>
           <BarChart values={[3, 5, 4, 6, 2, 5, 3]} labels={SHORT_DAYS} />
@@ -310,7 +432,12 @@ function LockedSample({ onBuy }: { onBuy: () => void }) {
         <Card>
           <SubjectBars
             items={[
-              { subjectId: 1, name: 'زیست‌شناسی', color: '#1F9D63', seconds: 9 },
+              {
+                subjectId: 1,
+                name: 'زیست‌شناسی',
+                color: '#1F9D63',
+                seconds: 9,
+              },
               { subjectId: 2, name: 'شیمی', color: '#3E5BDB', seconds: 6 },
               { subjectId: 3, name: 'فیزیک', color: '#E0812B', seconds: 4 },
             ]}
@@ -344,8 +471,20 @@ const useStyles = makeStyles(c => ({
     borderColor: c.border,
     padding: spacing.md,
   },
-  session: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 6 },
+  session: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: 6,
+  },
   tag: { paddingHorizontal: 8, borderRadius: radius.pill },
   dim: { opacity: 0.25, gap: spacing.md },
-  lockOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center' },
+  lockOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+  },
 }));

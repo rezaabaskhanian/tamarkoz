@@ -15,6 +15,10 @@ import kotlin.math.roundToLong
  */
 object SessionEngine {
   const val STRICT_MAX_MINUTES = 240
+  /** Sleep is the one activity long enough to need more than 4 strict hours. */
+  const val STRICT_MAX_SLEEP_MINUTES = 540
+
+  fun strictMaxMinutes(activity: String) = if (activity == "sleep") STRICT_MAX_SLEEP_MINUTES else STRICT_MAX_MINUTES
   const val EMERGENCY_WAIT_MS = 60_000L
   private const val HEARTBEAT_MS = 15_000L
 
@@ -109,9 +113,10 @@ object SessionEngine {
     if (cached != null) return error("already_active")
     if (!Permissions.hasRequired(ctx)) return error("missing_permissions")
     val mode = req.optString("mode", "normal")
+    val activity = req.optString("activity", "study").ifEmpty { "study" }
     var minutes = req.optInt("plannedMinutes", 0)
     if (minutes < 1) return error("invalid_duration")
-    if (mode == "strict") minutes = min(minutes, STRICT_MAX_MINUTES)
+    if (mode == "strict") minutes = min(minutes, strictMaxMinutes(activity))
     val pomodoro = req.optJSONObject("pomodoro")
     val s =
       create(
@@ -120,11 +125,15 @@ object SessionEngine {
         source = req.optString("source", "manual"),
         subjectId = req.getLong("subjectId"),
         subjectName = req.optString("subjectName"),
+        topic = req.optString("topic", "").take(60),
+        kind = req.optString("kind", "study").takeIf { it in setOf("study", "practice", "test") } ?: "study",
+        activity = activity,
+        activityName = req.optString("activityName", "").take(40),
         scheduleBlockId = -1,
         plannedMs = minutes * 60_000L,
         blocked = req.optJSONArray("blocked").toStringList(),
-        workMs = (pomodoro?.optInt("work") ?: 0) * 60_000L,
-        breakMs = (pomodoro?.optInt("break") ?: 0) * 60_000L,
+        workMs = if (activity == "study") (pomodoro?.optInt("work") ?: 0) * 60_000L else 0,
+        breakMs = if (activity == "study") (pomodoro?.optInt("break") ?: 0) * 60_000L else 0,
       ) ?: return error("no_apps")
     begin(ctx, s)
     return JSONObject().put("ok", true).put("session", snapshot(s))
@@ -137,10 +146,11 @@ object SessionEngine {
     if (cached != null) return "already_active"
     if (!Permissions.hasRequired(ctx)) return "missing_permissions"
     val cfg = FocusStore(ctx).config()
-    val subjectId = if (b.subjectId > 0) b.subjectId else cfg.defaultSubjectId
-    val subjectName = if (b.subjectId > 0) b.subjectName else cfg.defaultSubjectName
+    val study = b.activity == "study"
+    val subjectId = if (!study) -1 else if (b.subjectId > 0) b.subjectId else cfg.defaultSubjectId
+    val subjectName = if (!study) "" else if (b.subjectId > 0) b.subjectName else cfg.defaultSubjectName
     var plannedMs = endWall - System.currentTimeMillis()
-    if (b.mode == "strict") plannedMs = min(plannedMs, STRICT_MAX_MINUTES * 60_000L)
+    if (b.mode == "strict") plannedMs = min(plannedMs, strictMaxMinutes(b.activity) * 60_000L)
     if (plannedMs < 60_000) return "too_late"
     val s =
       create(
@@ -148,7 +158,11 @@ object SessionEngine {
         mode = b.mode,
         source = "schedule",
         subjectId = subjectId,
-        subjectName = subjectName.ifEmpty { "بدون درس" },
+        subjectName = if (study) subjectName.ifEmpty { "بدون درس" } else "",
+        topic = "",
+        kind = "study",
+        activity = b.activity,
+        activityName = b.activityName,
         scheduleBlockId = b.id,
         plannedMs = plannedMs,
         blocked = cfg.blockedApps,
@@ -165,6 +179,10 @@ object SessionEngine {
     source: String,
     subjectId: Long,
     subjectName: String,
+    topic: String,
+    kind: String,
+    activity: String,
+    activityName: String,
     scheduleBlockId: Long,
     plannedMs: Long,
     blocked: List<String>,
@@ -182,6 +200,10 @@ object SessionEngine {
       source = source,
       subjectId = subjectId,
       subjectName = subjectName,
+      topic = topic,
+      kind = kind,
+      activity = activity,
+      activityName = activityName,
       scheduleBlockId = scheduleBlockId,
       startedAt = System.currentTimeMillis(),
       plannedMs = plannedMs,
@@ -224,6 +246,10 @@ object SessionEngine {
         .put("nativeId", s.id)
         .put("subjectId", s.subjectId)
         .put("subjectName", s.subjectName)
+        .put("topic", s.topic)
+        .put("kind", s.kind)
+        .put("activity", s.activity)
+        .put("activityName", s.activityName)
         .put("mode", s.mode)
         .put("source", s.source)
         .put("plannedMinutes", (s.plannedMs / 60_000.0).roundToLong())
@@ -243,7 +269,7 @@ object SessionEngine {
     FocusService.stop(ctx)
     Notifications.cancel(ctx, Notifications.ID_SESSION)
     when (reason) {
-      EndReason.COMPLETED -> Notifications.finished(ctx, s.subjectName, s.studiedMs / 1000, store.config().finishSound)
+      EndReason.COMPLETED -> Notifications.finished(ctx, s.label, s.isStudy, s.studiedMs / 1000, store.config().finishSound)
       EndReason.BROKEN -> Notifications.broken(ctx)
     }
     StudyWidget.updateAll(ctx)

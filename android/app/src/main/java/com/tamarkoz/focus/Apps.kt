@@ -136,10 +136,38 @@ object InstalledApps {
       "com.spotify.music",
     )
 
+  /** AI assistants and search apps, locked too in an «offline» session along with every browser. */
+  private val KNOWN_ONLINE =
+    setOf(
+      "com.openai.chatgpt",
+      "com.google.android.apps.bard",
+      "com.anthropic.claude",
+      "ai.perplexity.app.android",
+      "com.microsoft.copilot",
+      "com.deepseek.chat",
+      "ai.x.grok",
+      "com.google.android.googlequicksearchbox",
+      "com.microsoft.bing",
+    )
+
+  /** Apps that open web links (browsers). */
+  private fun browsers(ctx: Context): Set<String> {
+    val web = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://example.com")).addCategory(Intent.CATEGORY_BROWSABLE)
+    return try {
+      ctx.packageManager
+        .queryIntentActivities(web, PackageManager.MATCH_ALL)
+        .map { it.activityInfo.packageName }
+        .toSet()
+    } catch (e: Exception) {
+      emptySet()
+    }
+  }
+
   /** Launchable apps (minus never-blocked ones) with cached icon files. */
   fun list(ctx: Context): JSONArray {
     val pm = ctx.packageManager
     val never = NeverBlock.compute(ctx)
+    val online = browsers(ctx) + KNOWN_ONLINE
     val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     val iconDir = File(ctx.cacheDir, "app_icons").apply { mkdirs() }
     val seen = HashSet<String>()
@@ -173,6 +201,7 @@ object InstalledApps {
           .put("label", ri.loadLabel(pm).toString())
           .put("icon", if (iconFile.exists()) "file://${iconFile.absolutePath}" else "")
           .put("suggested", suggested)
+          .put("online", pkg in online)
       )
     }
     return out

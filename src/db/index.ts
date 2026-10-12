@@ -53,19 +53,6 @@ export function initDatabase(): Promise<DB> {
   return initPromise;
 }
 
-export type DbInfo = { version: number; tables: string[] };
-
-export async function getDbInfo(): Promise<DbInfo> {
-  const conn = getDb();
-  const res = await conn.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-  );
-  return {
-    version: await getUserVersion(conn),
-    tables: res.rows.map(r => String(r.name)),
-  };
-}
-
 /** Runs a query and returns its rows typed as T. */
 export async function query<T>(sql: string, params: Scalar[] = []): Promise<T[]> {
   const res = await getDb().execute(sql, params);

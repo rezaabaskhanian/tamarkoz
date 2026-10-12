@@ -66,6 +66,10 @@ class FocusModule(private val ctx: ReactApplicationContext) : NativeFocusSpec(ct
         .put("brand", Build.BRAND.lowercase())
         .put("sdk", Build.VERSION.SDK_INT)
         .put("release", Build.VERSION.RELEASE)
+        .put("appVersion", com.tamarkoz.BuildConfig.VERSION_NAME)
+        .put("appVersionCode", com.tamarkoz.BuildConfig.VERSION_CODE)
+        // Survives «clear data»; only a full uninstall resets it. Used for the 7-day free trial.
+        .put("firstInstallTime", ctx.packageManager.getPackageInfo(ctx.packageName, 0).firstInstallTime)
         .toString()
     }
 

@@ -1,19 +1,28 @@
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { useLiveSession } from '../app/hooks';
 import { useNav, type RootStackParamList } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
 import { ProgressRing } from '../components/Charts';
 import { Icon } from '../components/Icon';
+import { TextField } from '../components/Pickers';
 import { Screen } from '../components/Screen';
+import { Sheet } from '../components/Sheet';
 import { Button, Card, CardTitle, IconBadge, Pill, Row } from '../components/ui';
 import { EMERGENCY_WAIT_SECONDS, EXTEND_MINUTES } from '../config';
+import { activityInfo, BREAK_TIPS } from '../activities';
+import { addThought, countThoughts } from '../db/thoughts';
+import { kindLabel } from '../db/topics';
 import { focus } from '../native/focus';
 import { useApp } from '../state/AppContext';
 import { fonts, makeStyles, radius, spacing, useTheme } from '../theme';
 import { formatClockFa, toFaDigits } from '../utils/digits';
 import { formatTimeOfDay } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
+
+/** Deep focus («flow») usually only starts after this much unbroken work. */
+const FLOW_MINUTES = 25;
 
 const QUOTES = [
   'هدف تو ارزش این تلاش را دارد؛ تمرکزت را حفظ کن.',
@@ -24,12 +33,27 @@ const QUOTES = [
 export function ActiveSessionScreen() {
   const nav = useNav();
   const route = useRoute<RouteProp<RootStackParamList, 'ActiveSession'>>();
-  const { refreshActive } = useApp();
+  const { refreshActive, settings } = useApp();
   const active = useLiveSession();
   const { colors } = useTheme();
   const s = useStyles();
   const [busy, setBusy] = useState(false);
   const [emergency, setEmergency] = useState<{ usedToday: boolean; releaseAt: number } | null>(null);
+  const [thoughtOpen, setThoughtOpen] = useState(false);
+  const [thought, setThought] = useState('');
+  const [thoughts, setThoughts] = useState(0);
+
+  useEffect(() => {
+    if (active?.id) countThoughts(active.id).then(setThoughts).catch(() => {});
+  }, [active?.id]);
+
+  const saveThought = async () => {
+    if (!thought.trim() || !active) return;
+    await addThought(thought, active.id);
+    setThought('');
+    setThoughtOpen(false);
+    setThoughts(n => n + 1);
+  };
 
   const strict = active?.mode === 'strict';
 
@@ -44,7 +68,7 @@ export function ActiveSessionScreen() {
 
   const confirmEndEarly = useCallback(() => {
     if (!active || active.mode !== 'normal') return;
-    Alert.alert(
+    showAlert(
       'پایان زودهنگام؟',
       `هنوز ${formatClockFa(Math.floor(active.remainingMs / 1000))} از جلسه مانده. زمانی که خواندی ثبت می‌شود.`,
       [
@@ -54,7 +78,7 @@ export function ActiveSessionScreen() {
           style: 'destructive',
           onPress: async () => {
             const r = await focus.endEarly();
-            if (!r.ok) Alert.alert('خطا', 'جلسه بسته نشد.');
+            if (!r.ok) showAlert('خطا', 'جلسه بسته نشد.');
           },
         },
       ],
@@ -98,7 +122,7 @@ export function ActiveSessionScreen() {
             : r.error === 'too_early'
               ? 'هنوز ۶۰ ثانیه نگذشته.'
               : failMsg;
-        Alert.alert('انجام نشد', msg);
+        showAlert('انجام نشد', msg);
       }
       await refreshActive();
     } finally {
@@ -109,17 +133,40 @@ export function ActiveSessionScreen() {
   const percent = Math.round(progress * 100);
   const endsAt = Date.now() + active.remainingMs;
   const ringColor = onBreak ? colors.success : strict ? colors.strict : colors.primary;
-  const quote = QUOTES[active.id.charCodeAt(0) % QUOTES.length];
+  const quote = settings.motivation.trim()
+    ? `یادت هست چرا؟ «${settings.motivation.trim()}»`
+    : QUOTES[active.id.charCodeAt(0) % QUOTES.length];
+  const isStudy = !active.activity || active.activity === 'study';
+  const isRest = active.activity === 'rest';
+  const deepWork = isStudy || active.activity === 'deep_work';
+  // Minutes of unbroken work so far (a pomodoro cycle restarts the climb into flow).
+  const workedMin = Math.floor((active.workMs > 0 && !onBreak ? active.workMs - active.phaseRemainingMs : active.studiedMs) / 60_000);
+  const inFlow = workedMin >= FLOW_MINUTES;
 
   return (
     <Screen title="جلسه‌ی تمرکز" back>
       <Row style={s.wrap}>
         <Pill label={strict ? 'حالت سخت فعال' : 'حالت عادی'} icon={strict ? 'lock' : 'shield'} tone={strict ? 'strict' : 'primary'} solid={strict} />
-        <Pill label={active.subjectName} icon="book" tone="strict" />
+        {active.activity && active.activity !== 'study' ? (
+          <Pill label={activityInfo(active.activity, active.activityName).label} icon={activityInfo(active.activity).icon} tone="strict" />
+        ) : (
+          <>
+            <Pill label={active.topic ? `${active.subjectName} · ${active.topic}` : active.subjectName} icon="book" tone="strict" />
+            <Pill label={kindLabel(active.kind)} tone="neutral" />
+          </>
+        )}
         {active.workMs > 0 && (
           <Pill label={onBreak ? 'پومودورو · استراحت' : 'پومودورو · مطالعه'} tone={onBreak ? 'success' : 'primary'} dot={ringColor} />
         )}
         {active.source === 'schedule' && <Pill label="از برنامه‌ی هفتگی" icon="calendar" />}
+        {deepWork && !onBreak && (
+          <Pill
+            label={inFlow ? 'در تمرکز عمیقی؛ قطعش نکن' : `${toFaDigits(FLOW_MINUTES - workedMin)} دقیقه تا تمرکز عمیق`}
+            icon="wave"
+            tone={inFlow ? 'cyan' : 'neutral'}
+            solid={inFlow}
+          />
+        )}
       </Row>
 
       <View style={s.center}>
@@ -147,25 +194,65 @@ export function ActiveSessionScreen() {
 
       <Card>
         <Row gap={spacing.md}>
-          <IconBadge name="shield" tone={active.blockedAttempts > 0 ? 'warning' : 'primary'} size={44} />
+          <IconBadge name="shield" tone={active.blockedAttempts > 0 ? 'success' : 'primary'} size={44} />
           <View style={{ flex: 1 }}>
             <AppText weight="bold">سپر تمرکز</AppText>
             <AppText variant="caption" muted>
               {active.blockedAttempts > 0
-                ? `${toFaDigits(active.blockedAttempts)} بار سراغ اپ ممنوع رفتی`
+                ? `${toFaDigits(active.blockedAttempts)} بار وسوسه شدی و برگشتی سر کارت 💪 هر مقاومت، اراده‌ات را قوی‌تر می‌کند.`
                 : 'تا الان سراغ هیچ اپ ممنوعی نرفتی 👏'}
             </AppText>
           </View>
           <View style={s.counter}>
-            <AppText weight="bold" color={active.blockedAttempts > 0 ? colors.warning : colors.primary}>
+            <AppText weight="bold" color={active.blockedAttempts > 0 ? colors.success : colors.primary}>
               {toFaDigits(active.blockedAttempts)}
             </AppText>
             <AppText variant="caption" muted>
-              حواس‌پرتی
+              مقاومت
             </AppText>
           </View>
         </Row>
       </Card>
+
+      {isRest && (
+        <Card>
+          <CardTitle title="استراحت واقعی، بدون گوشی" icon="coffee" tone="success" />
+          {BREAK_TIPS.map(t => (
+            <Row key={t.text}>
+              <Icon name={t.icon} size={18} color={colors.success} />
+              <AppText variant="caption">{t.text}</AppText>
+            </Row>
+          ))}
+        </Card>
+      )}
+
+      {!isRest && (
+        <Card onPress={() => setThoughtOpen(true)}>
+          <Row gap={spacing.md}>
+            <IconBadge name="note" tone="orange" size={44} />
+            <View style={{ flex: 1 }}>
+              <AppText weight="bold">کاغذ افکار</AppText>
+              <AppText variant="caption" muted>
+                {thoughts > 0
+                  ? `${toFaDigits(thoughts)} فکر یادداشت شد؛ بعد از جلسه سراغشان برو.`
+                  : 'فکری مزاحمت شد؟ بنویس و برگرد سر درس.'}
+              </AppText>
+            </View>
+            <Icon name="add" color={colors.orange} />
+          </Row>
+        </Card>
+      )}
+
+      <Sheet visible={thoughtOpen} onClose={() => setThoughtOpen(false)} title="یک خط بنویس، بعداً بهش فکر کن">
+        <TextField
+          value={thought}
+          onChange={setThought}
+          placeholder="مثلاً: فردا برای کلاس چی بپوشم؟"
+          maxLength={200}
+          autoFocus
+        />
+        <Button title="یادداشت و برگشت سر درس" icon="check" disabled={!thought.trim()} onPress={saveThought} />
+      </Sheet>
 
       <Card tone="tint" onPress={busy ? undefined : () => run(() => focus.addMinutes(EXTEND_MINUTES), 'زمان اضافه نشد.')}>
         <Row style={{ justifyContent: 'center' }}>

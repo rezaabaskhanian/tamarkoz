@@ -150,6 +150,20 @@ class BillingModule(private val ctx: ReactApplicationContext) : NativeBillingSpe
     }
   }
 
+  /**
+   * Consumes a one-time purchase so it can be bought again. Called only after the
+   * purchased period has expired — until then the unconsumed purchase is what lets
+   * «بازیابی خرید» work after a reinstall (there is no server keeping it).
+   */
+  override fun consume(purchaseToken: String, promise: Promise) {
+    withPayment(promise) { p ->
+      p.consumeProduct(purchaseToken) {
+        consumeSucceed { promise.resolve(JSONObject().put("ok", true).toString()) }
+        consumeFailed { t -> promise.resolve(err(errorCode(t))) }
+      }
+    }
+  }
+
   companion object {
     const val NAME = NativeBillingSpec.NAME
     private const val BAZAAR_PACKAGE = "com.farsitel.bazaar"

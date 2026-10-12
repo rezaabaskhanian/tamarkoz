@@ -1,6 +1,6 @@
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, TextInput, View } from 'react-native';
 import { usePaywall } from '../app/hooks';
 import { useNav, type RootStackParamList } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
@@ -13,6 +13,7 @@ import { focus, type InstalledApp } from '../native/focus';
 import { useApp } from '../state/AppContext';
 import { fonts, makeStyles, radius, spacing, useTheme } from '../theme';
 import { toFaDigits } from '../utils/digits';
+import { showAlert } from '../components/Dialog';
 
 type Item = { kind: 'header'; title: string } | { kind: 'app'; app: InstalledApp };
 
@@ -70,12 +71,12 @@ export function BlockedAppsScreen() {
   const toggle = async (app: InstalledApp) => {
     const isOn = selected.includes(app.packageName);
     if (strictLocked) {
-      Alert.alert('حالت سخت', 'در جلسه‌ی سخت فهرست اپ‌های ممنوع قفل است.');
+      showAlert('حالت سخت', 'در جلسه‌ی سخت فهرست اپ‌های ممنوع قفل است.');
       return;
     }
     if (isOn) {
       if (active) {
-        Alert.alert('جلسه در حال اجراست', 'وسط جلسه می‌شود اپ اضافه کرد ولی نمی‌شود حذف کرد.');
+        showAlert('جلسه در حال اجراست', 'وسط جلسه می‌شود اپ اضافه کرد ولی نمی‌شود حذف کرد.');
         return;
       }
       await persist(selected.filter(p => p !== app.packageName));

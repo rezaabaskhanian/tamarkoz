@@ -1,17 +1,39 @@
 import { useRoute, type RouteProp } from '@react-navigation/native';
 import { useEffect, useState } from 'react';
-import { Alert, View } from 'react-native';
+import { View } from 'react-native';
 import { useNav, type RootStackParamList } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
+import { ActivityPicker } from '../components/ActivityPicker';
 import { NumberInput, TimeStepper } from '../components/Pickers';
 import { Screen } from '../components/Screen';
-import { Button, Card, CardTitle, Chip, IconButton, ModeCard, Row, Tile } from '../components/ui';
-import { MAX_SESSION_MINUTES, MIN_SESSION_MINUTES, STRICT_MAX_MINUTES } from '../config';
-import { deleteBlock, findOverlap, listBlocks, saveBlock, type ScheduleBlock } from '../db/schedule';
+import {
+  Button,
+  Card,
+  CardTitle,
+  Chip,
+  IconButton,
+  ModeCard,
+  Row,
+  Tile,
+} from '../components/ui';
+import {
+  MAX_SESSION_MINUTES,
+  MIN_SESSION_MINUTES,
+  STRICT_MAX_MINUTES,
+} from '../config';
+import { activityInfo, strictMaxFor } from '../activities';
+import {
+  deleteBlock,
+  findOverlap,
+  listBlocks,
+  saveBlock,
+  type ScheduleBlock,
+} from '../db/schedule';
 import { useApp } from '../state/AppContext';
 import { makeStyles, radius, spacing, useTheme } from '../theme';
 import { formatDurationFa, toFaDigits } from '../utils/digits';
 import { formatMinuteOfDay, WEEKDAYS } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
 
 const DURATIONS = [45, 60, 90, 120, 180];
 const SHORT_DAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'];
@@ -24,11 +46,16 @@ export function BlockEditorScreen() {
   const { colors } = useTheme();
   const st = useStyles();
 
-  const [days, setDays] = useState<number[]>(route.params?.weekday != null ? [route.params.weekday] : []);
+  const [days, setDays] = useState<number[]>(
+    route.params?.weekday != null ? [route.params.weekday] : [],
+  );
   const [start, setStart] = useState(16 * 60);
   const [duration, setDuration] = useState<number | null>(90);
   const [subjectId, setSubjectId] = useState<number | null>(null);
   const [mode, setMode] = useState<'normal' | 'strict'>('normal');
+  const [activity, setActivity] = useState('study');
+  const [activityName, setActivityName] = useState('درس');
+  const isStudy = activity === 'study';
   const [all, setAll] = useState<ScheduleBlock[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -42,22 +69,37 @@ export function BlockEditorScreen() {
         setDuration(b.duration_minutes);
         setSubjectId(b.subject_id);
         setMode(b.mode);
+        setActivity(b.activity);
+        setActivityName(
+          b.activity === 'study'
+            ? 'درس'
+            : activityInfo(b.activity, b.activity_name).label,
+        );
       }
     });
   }, [blockId]);
 
-  const max = mode === 'strict' ? STRICT_MAX_MINUTES : MAX_SESSION_MINUTES;
-  const validDuration = duration != null && duration >= MIN_SESSION_MINUTES && duration <= max;
+  const strictMax = isStudy ? STRICT_MAX_MINUTES : strictMaxFor(activity);
+  const max =
+    mode === 'strict' ? strictMax : Math.max(MAX_SESSION_MINUTES, strictMax);
+  const validDuration =
+    duration != null && duration >= MIN_SESSION_MINUTES && duration <= max;
 
   const save = async () => {
     if (!validDuration || days.length === 0) return;
     // Blocks may not overlap — check every selected day before saving anything.
     for (const w of days) {
-      const clash = findOverlap(all, { weekday: w, start_minute: start, duration_minutes: duration! }, blockId);
+      const clash = findOverlap(
+        all,
+        { weekday: w, start_minute: start, duration_minutes: duration! },
+        blockId,
+      );
       if (clash) {
-        Alert.alert(
+        showAlert(
           'هم‌پوشانی',
-          `این نوبت با نوبت ${WEEKDAYS[clash.weekday]} ساعت ${formatMinuteOfDay(clash.start_minute)} هم‌پوشانی دارد.`,
+          `این نوبت با نوبت ${WEEKDAYS[clash.weekday]} ساعت ${formatMinuteOfDay(
+            clash.start_minute,
+          )} هم‌پوشانی دارد.`,
         );
         return;
       }
@@ -66,7 +108,15 @@ export function BlockEditorScreen() {
     try {
       for (const w of days) {
         await saveBlock(
-          { weekday: w, start_minute: start, duration_minutes: duration!, subject_id: subjectId, mode },
+          {
+            weekday: w,
+            start_minute: start,
+            duration_minutes: duration!,
+            subject_id: isStudy ? subjectId : null,
+            mode,
+            activity,
+            activity_name: isStudy ? null : activityName,
+          },
           blockId,
         );
       }
@@ -79,7 +129,7 @@ export function BlockEditorScreen() {
 
   const remove = () => {
     if (!blockId) return;
-    Alert.alert('حذف نوبت؟', 'جلسه‌های گذشته در گزارش می‌مانند.', [
+    showAlert('حذف نوبت؟', 'جلسه‌های گذشته در گزارش می‌مانند.', [
       { text: 'نه', style: 'cancel' },
       {
         text: 'حذف',
@@ -108,32 +158,64 @@ export function BlockEditorScreen() {
             disabled={!validDuration || days.length === 0}
             onPress={save}
           />
-          {blockId ? <IconButton icon="delete" tone="danger" label="حذف نوبت" onPress={remove} size={56} /> : null}
+          {blockId ? (
+            <IconButton
+              icon="delete"
+              tone="danger"
+              label="حذف نوبت"
+              onPress={remove}
+              size={56}
+            />
+          ) : null}
         </Row>
       }
     >
-      <View style={st.section}>
-        <CardTitle
-          title="درس هدف"
-          icon="book"
-          right={
-            <AppText variant="caption" muted>
-              اختیاری
-            </AppText>
+      <ActivityPicker
+        value={activity}
+        onChange={(k, label) => {
+          setActivity(k);
+          setActivityName(label);
+          if (k === 'sleep') {
+            setStart(23 * 60);
+            setDuration(480);
           }
-        />
-        <Row style={st.wrap}>
-          <Chip label="بدون درس" selected={subjectId == null} onPress={() => setSubjectId(null)} />
-          {subjects.map(s => (
-            <Chip key={s.id} label={s.name} color={s.color} selected={subjectId === s.id} onPress={() => setSubjectId(s.id)} />
-          ))}
-        </Row>
-        {subjectId == null && (
-          <AppText variant="caption" muted>
-            جلسه با آخرین درسی که خواندی ثبت می‌شود.
-          </AppText>
-        )}
-      </View>
+        }}
+      />
+
+      {isStudy && (
+        <View style={st.section}>
+          <CardTitle
+            title="درس هدف"
+            icon="book"
+            right={
+              <AppText variant="caption" muted>
+                اختیاری
+              </AppText>
+            }
+          />
+          <Row style={st.wrap}>
+            <Chip
+              label="بدون درس"
+              selected={subjectId == null}
+              onPress={() => setSubjectId(null)}
+            />
+            {subjects.map(s => (
+              <Chip
+                key={s.id}
+                label={s.name}
+                color={s.color}
+                selected={subjectId === s.id}
+                onPress={() => setSubjectId(s.id)}
+              />
+            ))}
+          </Row>
+          {subjectId == null && (
+            <AppText variant="caption" muted>
+              جلسه با آخرین درسی که خواندی ثبت می‌شود.
+            </AppText>
+          )}
+        </View>
+      )}
 
       <View style={st.section}>
         <CardTitle
@@ -156,7 +238,13 @@ export function BlockEditorScreen() {
               a11yLabel={d}
               selected={days.includes(w)}
               onPress={() =>
-                setDays(cur => (blockId ? [w] : cur.includes(w) ? cur.filter(x => x !== w) : [...cur, w].sort()))
+                setDays(cur =>
+                  blockId
+                    ? [w]
+                    : cur.includes(w)
+                    ? cur.filter(x => x !== w)
+                    : [...cur, w].sort(),
+                )
               }
             />
           ))}
@@ -192,8 +280,16 @@ export function BlockEditorScreen() {
             />
           ))}
         </View>
-        <NumberInput value={duration} onChange={setDuration} placeholder="دلخواه (دقیقه)" maxLength={3} />
-        <AppText variant="caption" color={validDuration ? colors.textMuted : colors.danger}>
+        <NumberInput
+          value={duration}
+          onChange={setDuration}
+          placeholder="دلخواه (دقیقه)"
+          maxLength={3}
+        />
+        <AppText
+          variant="caption"
+          color={validDuration ? colors.textMuted : colors.danger}
+        >
           بین {toFaDigits(MIN_SESSION_MINUTES)} و {toFaDigits(max)} دقیقه
         </AppText>
       </Card>
@@ -229,7 +325,19 @@ export function BlockEditorScreen() {
 const useStyles = makeStyles(c => ({
   section: { gap: spacing.sm + 4 },
   wrap: { flexWrap: 'wrap' },
-  days: { flexDirection: 'row', gap: 4, backgroundColor: c.surfaceAlt, borderRadius: radius.lg, padding: 4 },
+  days: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: c.surfaceAlt,
+    borderRadius: radius.lg,
+    padding: 4,
+  },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  modes: { flexDirection: 'row', gap: 6, backgroundColor: c.surfaceAlt, borderRadius: radius.lg, padding: 6 },
+  modes: {
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: c.surfaceAlt,
+    borderRadius: radius.lg,
+    padding: 6,
+  },
 }));

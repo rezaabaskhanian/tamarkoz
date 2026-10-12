@@ -8,6 +8,9 @@ export type ScheduleBlock = {
   subject_id: number | null;
   mode: 'normal' | 'strict';
   enabled: number;
+  activity: string; // "study" or another activity key
+  activity_name: string | null;
+  expires_at: number | null; // one-off marathon block; null = every week
 };
 
 export type ScheduleBlockWithSubject = ScheduleBlock & {
@@ -23,14 +26,21 @@ export function listBlocks() {
   );
 }
 
-export type BlockInput = Omit<ScheduleBlock, 'id' | 'enabled'> & { enabled?: number };
+export type BlockInput = Omit<ScheduleBlock, 'id' | 'enabled' | 'activity' | 'activity_name' | 'expires_at'> & {
+  enabled?: number;
+  activity?: string;
+  activity_name?: string | null;
+  expires_at?: number | null;
+};
 
 /** Returns the block that would overlap the given one (blocks may not overlap, F13). */
-export function findOverlap(
-  blocks: ScheduleBlock[],
+type BlockTime = Pick<ScheduleBlock, 'id' | 'weekday' | 'start_minute' | 'duration_minutes'>;
+
+export function findOverlap<T extends BlockTime>(
+  blocks: T[],
   input: Pick<ScheduleBlock, 'weekday' | 'start_minute' | 'duration_minutes'>,
   ignoreId?: number,
-): ScheduleBlock | null {
+): T | null {
   const WEEK = 7 * 1440;
   const a0 = input.weekday * 1440 + input.start_minute;
   const a1 = a0 + input.duration_minutes;
@@ -55,19 +65,23 @@ export async function saveBlock(input: BlockInput, id?: number) {
     input.subject_id,
     input.mode,
     input.enabled ?? 1,
+    input.activity ?? 'study',
+    input.activity_name ?? null,
   ];
   if (id) {
+    // expires_at is left as is: editing a marathon block keeps it one-off.
     await run(
       `UPDATE schedule_blocks SET weekday = ?, start_minute = ?, duration_minutes = ?,
-         subject_id = ?, mode = ?, enabled = ? WHERE id = ?`,
+         subject_id = ?, mode = ?, enabled = ?, activity = ?, activity_name = ? WHERE id = ?`,
       [...params, id],
     );
     return id;
   }
   const res = await run(
-    `INSERT INTO schedule_blocks (weekday, start_minute, duration_minutes, subject_id, mode, enabled)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    params,
+    `INSERT INTO schedule_blocks
+       (weekday, start_minute, duration_minutes, subject_id, mode, enabled, activity, activity_name, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [...params, input.expires_at ?? null],
   );
   return res.insertId!;
 }
@@ -79,6 +93,12 @@ export async function setBlockEnabled(id: number, enabled: boolean) {
 export async function deleteBlock(id: number) {
   // Past sessions keep their history; their schedule_block_id becomes NULL (FK ON DELETE SET NULL).
   await run('DELETE FROM schedule_blocks WHERE id = ?', [id]);
+}
+
+/** Marathon blocks whose last day has passed; native already ignores them. */
+export async function deleteExpiredBlocks(now = Date.now()) {
+  const res = await run('DELETE FROM schedule_blocks WHERE expires_at IS NOT NULL AND expires_at <= ?', [now]);
+  return res.rowsAffected;
 }
 
 export async function skipsBetween(from: number, to: number) {

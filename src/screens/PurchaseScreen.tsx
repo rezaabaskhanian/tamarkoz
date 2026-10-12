@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useNav } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
-import { Icon, type IconName } from '../components/Icon';
+import { type IconName } from '../components/Icon';
 import { Screen } from '../components/Screen';
-import { Button, Card, Row } from '../components/ui';
-import { PASS_EXPIRES_AT, PRODUCT_MONTHLY, PRODUCT_PASS } from '../config';
+import { Button, Card, IconBadge, Row } from '../components/ui';
+import { PLANS, TRIAL_DAYS } from '../config';
 import { billing, billingErrorMessage, type Sku } from '../native/billing';
-import { buy, restorePurchases } from '../services/purchases';
+import { daysLeft } from '../services/entitlement';
+import { buy, PLAN_IDS, restorePurchases } from '../services/purchases';
 import { useApp } from '../state/AppContext';
 import { makeStyles, radius, spacing, useTheme } from '../theme';
 import { toFaDigits } from '../utils/digits';
 import { formatJalaliDate } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
+
+const FEATURE_TONES = ['strict', 'cyan', 'primary', 'pink', 'orange', 'warning'] as const;
 
 const FEATURES: { icon: IconName; title: string; text: string }[] = [
   { icon: 'lock', title: 'حالت سخت', text: 'بدون دکمه‌ی پایان؛ فقط روزی یک خروج اضطراری' },
@@ -24,18 +28,17 @@ const FEATURES: { icon: IconName; title: string; text: string }[] = [
 
 export function PurchaseScreen() {
   const nav = useNav();
-  const { active, isPremium, premiumUntil, entitlements, reloadEntitlements } = useApp();
+  const { active, access, reloadEntitlements } = useApp();
   const { colors } = useTheme();
-  const s = useStyles();
   const [skus, setSkus] = useState<Sku[] | null>(null);
   const [skuError, setSkuError] = useState<string | null>(null);
-  const [plan, setPlan] = useState(PRODUCT_PASS);
+  const [plan, setPlan] = useState(PLANS.find(p => p.best)?.productId ?? PLANS[0].productId);
   const [busy, setBusy] = useState<'buy' | 'restore' | null>(null);
 
   useEffect(() => {
     if (active) return;
     billing
-      .skus([PRODUCT_PASS], [PRODUCT_MONTHLY])
+      .skus(PLAN_IDS, [])
       .then(r => (r.ok ? setSkus(r.skus) : setSkuError(r.error)))
       .catch(() => setSkuError('failed'));
   }, [active]);
@@ -60,9 +63,9 @@ export function PurchaseScreen() {
       const r = await buy(plan);
       if (r.ok) {
         await reloadEntitlements();
-        Alert.alert('ممنون! 🎉', 'نسخه‌ی کامل فعال شد.', [{ text: 'باشه', onPress: () => nav.goBack() }]);
+        showAlert('ممنون! 🎉', 'اشتراکت فعال شد.', [{ text: 'باشه', onPress: () => nav.goBack() }], 'paymentSuccess');
       } else if (r.error !== 'canceled') {
-        Alert.alert('خرید انجام نشد', billingErrorMessage(r.error));
+        showAlert('خرید انجام نشد', billingErrorMessage(r.error), undefined, 'paymentFailed');
       }
     } finally {
       setBusy(null);
@@ -74,22 +77,23 @@ export function PurchaseScreen() {
     try {
       const r = await restorePurchases();
       await reloadEntitlements();
-      if (!r.ok) Alert.alert('بازیابی نشد', billingErrorMessage(r.error));
-      else if (r.found) Alert.alert('بازیابی شد', 'خریدت پیدا شد و نسخه‌ی کامل فعال است.');
-      else Alert.alert('خریدی پیدا نشد', 'با همان حساب بازاری که خرید کردی وارد شو و دوباره امتحان کن.');
+      if (!r.ok) showAlert('بازیابی نشد', billingErrorMessage(r.error));
+      else if (r.found) showAlert('بازیابی شد', 'خریدت پیدا شد و نسخه‌ی کامل فعال است.');
+      else showAlert('خریدی پیدا نشد', 'با همان حساب بازاری که خرید کردی وارد شو و دوباره امتحان کن.');
     } finally {
       setBusy(null);
     }
   };
 
-  const hasSub = entitlements.some(e => e.product_id === PRODUCT_MONTHLY);
+  const purchased = access.source === 'purchase';
+  const trial = access.source === 'trial';
 
   return (
     <Screen
       title="نسخه‌ی کامل"
       back
       footer={
-        isPremium ? undefined : (
+        purchased ? undefined : (
           <>
             <Button title="خرید از بازار" size="lg" loading={busy === 'buy'} disabled={busy != null} onPress={onBuy} />
             <Button title="بازیابی خرید" variant="ghost" loading={busy === 'restore'} disabled={busy != null} onPress={onRestore} />
@@ -97,23 +101,42 @@ export function PurchaseScreen() {
         )
       }
     >
-      {isPremium && (
+      {purchased && (
         <Card style={{ backgroundColor: colors.successSoft, borderColor: colors.successSoft }}>
           <AppText weight="bold" color={colors.success}>
-            نسخه‌ی کامل فعال است
+            اشتراکت فعال است
           </AppText>
           <AppText variant="caption">
-            {hasSub ? 'اشتراک ماهانه' : `اعتبار تا ${formatJalaliDate(premiumUntil)}`}
+            تا {formatJalaliDate(access.until)} · {toFaDigits(daysLeft(access.until))} روز مانده
+          </AppText>
+          <AppText variant="caption" muted>
+            بعد از پایان این مدت می‌توانی دوباره بخری.
           </AppText>
           <Button title="بازیابی خرید" variant="ghost" size="sm" loading={busy === 'restore'} onPress={onRestore} />
         </Card>
       )}
+      {trial && (
+        <Card tone="tint">
+          <AppText weight="bold" color={colors.primary}>
+            دوره‌ی رایگان {toFaDigits(TRIAL_DAYS)} روزه · {toFaDigits(daysLeft(access.until))} روز مانده
+          </AppText>
+          <AppText variant="caption" muted>
+            الان همه‌ی امکانات نسخه‌ی کامل را داری. برای ادامه بعد از {formatJalaliDate(access.until)} یکی از طرح‌ها را بخر.
+          </AppText>
+        </Card>
+      )}
+      {access.source === 'none' && access.trialEndsAt > 0 && (
+        <Card tone="tint">
+          <AppText weight="bold">دوره‌ی رایگانت تمام شده</AppText>
+          <AppText variant="caption" muted>
+            داده‌هایت سر جایشان هستند؛ با خرید، همه‌ی امکانات دوباره باز می‌شوند.
+          </AppText>
+        </Card>
+      )}
 
-      {FEATURES.map(f => (
+      {FEATURES.map((f, i) => (
         <Row key={f.title} gap={spacing.md}>
-          <View style={s.featureIcon}>
-            <Icon name={f.icon} size={20} color={colors.primary} />
-          </View>
+          <IconBadge name={f.icon} tone={FEATURE_TONES[i % FEATURE_TONES.length]} size={40} />
           <View style={{ flex: 1 }}>
             <AppText weight="bold">{f.title}</AppText>
             <AppText variant="caption" muted>
@@ -123,23 +146,19 @@ export function PurchaseScreen() {
         </Row>
       ))}
 
-      {!isPremium && (
+      {!purchased && (
         <>
-          <PlanCard
-            selected={plan === PRODUCT_PASS}
-            onPress={() => setPlan(PRODUCT_PASS)}
-            title="بسته‌ی «تا روز کنکور»"
-            price={price(PRODUCT_PASS)}
-            note={`یک بار پرداخت · معتبر تا ${formatJalaliDate(PASS_EXPIRES_AT)}`}
-            highlight
-          />
-          <PlanCard
-            selected={plan === PRODUCT_MONTHLY}
-            onPress={() => setPlan(PRODUCT_MONTHLY)}
-            title="اشتراک ماهانه"
-            price={price(PRODUCT_MONTHLY)}
-            note="هر ماه تمدید می‌شود؛ هر وقت خواستی از بازار لغوش کن"
-          />
+          {PLANS.map(p => (
+            <PlanCard
+              key={p.productId}
+              selected={plan === p.productId}
+              onPress={() => setPlan(p.productId)}
+              title={p.title}
+              price={price(p.productId)}
+              note={`یک بار پرداخت · ${toFaDigits(p.days)} روز دسترسی کامل · تمدید خودکار ندارد`}
+              highlight={p.best}
+            />
+          ))}
           {skuError && (
             <AppText variant="caption" color={colors.danger}>
               {billingErrorMessage(skuError)}
@@ -197,14 +216,6 @@ function PlanCard({
 }
 
 const useStyles = makeStyles(c => ({
-  featureIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    backgroundColor: c.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   plan: {
     flexDirection: 'row',
     alignItems: 'center',

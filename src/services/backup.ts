@@ -6,7 +6,7 @@ import { SCHEMA_VERSION } from '../db/migrations';
 // into one JSON file, for moving to a new phone.
 
 // Order matters: parents before children for inserts, reverse for deletes.
-const TABLES = ['subjects', 'schedule_blocks', 'sessions', 'schedule_skips', 'blocked_apps', 'settings'] as const;
+const TABLES = ['subjects', 'topics', 'activities', 'schedule_blocks', 'sessions', 'schedule_skips', 'blocked_apps', 'settings'] as const;
 
 type Backup = {
   app: 'tamarkoz';
@@ -59,5 +59,6 @@ export async function clearAllData() {
   await getDb().transaction(async tx => {
     for (const t of [...TABLES].reverse()) await tx.execute(`DELETE FROM ${t}`);
     await tx.execute('DELETE FROM entitlement');
+    await tx.execute('DELETE FROM thoughts');
   });
 }

@@ -31,6 +31,10 @@ export const billing = {
   async purchases(): Promise<{ ok: true; inApp: Purchase[]; subs: Purchase[] } | Fail> {
     return JSON.parse(await NativeBilling.getPurchases());
   },
+
+  async consume(purchaseToken: string): Promise<{ ok: true } | Fail> {
+    return JSON.parse(await NativeBilling.consume(purchaseToken));
+  },
 };
 
 /** Persian message for a billing error code. */

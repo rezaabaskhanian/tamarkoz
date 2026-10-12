@@ -3,6 +3,7 @@ import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/app/RootNavigator';
 import { AppText } from './src/components/AppText';
+import { DialogHost } from './src/components/Dialog';
 import { initDatabase } from './src/db';
 import { AppProvider, useApp } from './src/state/AppContext';
 import { ThemeProvider, useTheme, type ThemePref } from './src/theme';
@@ -37,6 +38,7 @@ function Themed() {
     <ThemeProvider pref={(settings.theme as ThemePref) || 'system'}>
       <StatusBarForTheme />
       {ready ? <RootNavigator /> : <Splash error={null} />}
+      <DialogHost />
     </ThemeProvider>
   );
 }

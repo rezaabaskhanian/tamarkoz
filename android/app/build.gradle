@@ -57,7 +57,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -72,6 +72,30 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Version is read from android/gradle.properties so it changes in one place only.
+def appVersionName = project.property("APP_VERSION_NAME")
+def appVersionCode = project.property("APP_VERSION_CODE").toInteger()
+
+// Release signing key comes from android/keystore.properties (not in git).
+// Cafe Bazaar only accepts updates signed with the key of the first upload,
+// so a release must never be signed with debug.keystore.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    def releaseTask = graph.allTasks.any { t ->
+        (t.name.startsWith("assemble") || t.name.startsWith("bundle")) && t.name.endsWith("Release")
+    }
+    if (releaseTask && !keystorePropsFile.exists()) {
+        throw new GradleException(
+            "android/keystore.properties not found — release builds must be signed with the release key, not debug.keystore. See RELEASE.md"
+        )
+    }
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -82,8 +106,8 @@ android {
         applicationId "com.tamarkoz"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
         // Cafe Bazaar in-app billing public RSA key (developer panel → In-app billing).
         // Set BAZAAR_RSA_KEY in android/gradle.properties or ~/.gradle/gradle.properties.
         buildConfigField "String", "BAZAAR_RSA_KEY", "\"${project.findProperty('BAZAAR_RSA_KEY') ?: ''}\""
@@ -98,17 +122,54 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (keystorePropsFile.exists()) {
+            release {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig keystorePropsFile.exists() ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    // The app is Persian-only: drop other languages' strings bundled by libraries.
+    androidResources {
+        localeFilters += ["fa"]
+    }
+
+    // One APK per CPU architecture instead of one big APK with both. Cafe Bazaar takes
+    // per-ABI APKs; there is no all-architectures APK (universalApk false).
+    splits {
+        abi {
+            reset()
+            enable true
+            universalApk false
+            include "armeabi-v7a", "arm64-v8a"
+        }
+    }
+
+    // Each ABI APK gets its own versionCode (e.g. 1001 and 1002) because the store rejects
+    // two APKs with the same code; the file name carries the version:
+    // Tamarkoz-v1.0.0-1-arm64-v8a-release.apk
+    def abiCodes = ["armeabi-v7a": 1, "arm64-v8a": 2]
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def abi = output.getFilter("ABI")
+            if (abi != null) {
+                output.versionCodeOverride = variant.versionCode * 1000 + abiCodes.get(abi)
+            }
+            outputFileName = "Tamarkoz-v${variant.versionName}-${variant.versionCode}-${abi ?: "universal"}-${variant.buildType.name}.apk"
         }
     }
 }

@@ -6,7 +6,7 @@ export type SessionSource = 'manual' | 'schedule' | 'manual_log';
 
 export type SessionRow = {
   id: number;
-  subject_id: number;
+  subject_id: number | null; // null for non-study activities
   mode: 'normal' | 'strict';
   source: SessionSource;
   planned_minutes: number | null;
@@ -18,9 +18,21 @@ export type SessionRow = {
   tests_count: number | null;
   schedule_block_id: number | null;
   native_id: string | null;
+  topic: string | null;
+  kind: 'study' | 'practice' | 'test';
+  activity: string;
+  activity_name: string | null;
 };
 
-export type SessionWithSubject = SessionRow & { subject_name: string; subject_color: string };
+/** A study session joined with its subject (sessionsBetween inner-joins, so never another activity). */
+export type SessionWithSubject = Omit<SessionRow, 'subject_id'> & {
+  subject_id: number;
+  subject_name: string;
+  subject_color: string;
+};
+
+/** Any session, subject optional (other activities have none). */
+export type SessionMaybeSubject = SessionRow & { subject_name: string | null; subject_color: string | null };
 
 /**
  * Copies sessions and schedule skips finished by the native side into SQLite.
@@ -31,6 +43,30 @@ export async function importFinished(sessions: FinishedSession[], skips: Pending
   const doneSkips: string[] = [];
   await getDb().transaction(async tx => {
     for (const s of sessions) {
+      const activity = s.activity || 'study';
+      if (activity !== 'study') {
+        await tx.execute(
+          `INSERT OR IGNORE INTO sessions
+            (subject_id, mode, source, planned_minutes, actual_seconds, started_at, ended_at,
+             end_reason, blocked_attempts, native_id, activity, activity_name)
+           VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            s.mode,
+            s.source,
+            s.plannedMinutes,
+            s.actualSeconds,
+            s.startedAt,
+            s.endedAt,
+            s.endReason,
+            s.blockedAttempts,
+            s.nativeId,
+            activity,
+            s.activityName || null,
+          ],
+        );
+        doneIds.push(s.nativeId);
+        continue;
+      }
       let subjectId = s.subjectId;
       const name = s.subjectName || 'بدون درس';
       if (subjectId > 0) {
@@ -60,8 +96,8 @@ export async function importFinished(sessions: FinishedSession[], skips: Pending
       await tx.execute(
         `INSERT OR IGNORE INTO sessions
           (subject_id, mode, source, planned_minutes, actual_seconds, started_at, ended_at,
-           end_reason, blocked_attempts, schedule_block_id, native_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           end_reason, blocked_attempts, schedule_block_id, native_id, topic, kind)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           subjectId,
           s.mode,
@@ -74,6 +110,8 @@ export async function importFinished(sessions: FinishedSession[], skips: Pending
           s.blockedAttempts,
           block && block.rows.length ? s.scheduleBlockId : null,
           s.nativeId,
+          s.topic || null,
+          s.kind ?? 'study',
         ],
       );
       doneIds.push(s.nativeId);
@@ -93,9 +131,9 @@ export async function importFinished(sessions: FinishedSession[], skips: Pending
 }
 
 export async function getSessionByNativeId(nativeId: string) {
-  const rows = await query<SessionWithSubject>(
+  const rows = await query<SessionMaybeSubject>(
     `SELECT s.*, sub.name AS subject_name, sub.color AS subject_color
-     FROM sessions s JOIN subjects sub ON sub.id = s.subject_id WHERE s.native_id = ?`,
+     FROM sessions s LEFT JOIN subjects sub ON sub.id = s.subject_id WHERE s.native_id = ?`,
     [nativeId],
   );
   return rows[0] ?? null;
@@ -106,13 +144,19 @@ export async function setTestsCount(sessionId: number, count: number | null) {
 }
 
 /** F19: a study period without the phone. Counted on the given day, shown as «دستی». */
-export async function addManualLog(subjectId: number, dayStart: number, minutes: number) {
+export async function addManualLog(
+  subjectId: number,
+  dayStart: number,
+  minutes: number,
+  topic = '',
+  kind: 'study' | 'practice' | 'test' = 'study',
+) {
   const startedAt = dayStart + 12 * 60 * 60 * 1000; // midday, safely inside the day
   await run(
     `INSERT INTO sessions (subject_id, mode, source, planned_minutes, actual_seconds,
-       started_at, ended_at, end_reason, blocked_attempts)
-     VALUES (?, 'normal', 'manual_log', ?, ?, ?, ?, 'completed', 0)`,
-    [subjectId, minutes, minutes * 60, startedAt, startedAt + minutes * 60_000],
+       started_at, ended_at, end_reason, blocked_attempts, topic, kind)
+     VALUES (?, 'normal', 'manual_log', ?, ?, ?, ?, 'completed', 0, ?, ?)`,
+    [subjectId, minutes, minutes * 60, startedAt, startedAt + minutes * 60_000, topic || null, kind],
   );
 }
 
@@ -126,6 +170,16 @@ export function sessionsBetween(from: number, to: number) {
      FROM sessions s JOIN subjects sub ON sub.id = s.subject_id
      WHERE s.started_at >= ? AND s.started_at < ?
      ORDER BY s.started_at DESC`,
+    [from, to],
+  );
+}
+
+/** Non-study activities in a period, for the report's «حالت‌های دیگر» section. */
+export function activitiesBetween(from: number, to: number) {
+  return query<{ activity: string; activity_name: string | null; sec: number; n: number }>(
+    `SELECT activity, MAX(activity_name) AS activity_name, SUM(actual_seconds) AS sec, COUNT(*) AS n
+     FROM sessions WHERE activity <> 'study' AND started_at >= ? AND started_at < ?
+     GROUP BY activity ORDER BY sec DESC`,
     [from, to],
   );
 }

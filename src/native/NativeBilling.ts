@@ -7,6 +7,7 @@ export interface Spec extends TurboModule {
   getSkuDetails(inAppIdsJson: string, subsIdsJson: string): Promise<string>;
   purchase(productId: string, isSubscription: boolean): Promise<string>;
   getPurchases(): Promise<string>;
+  consume(purchaseToken: string): Promise<string>;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('NativeBilling');

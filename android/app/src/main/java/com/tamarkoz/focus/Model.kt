@@ -27,6 +27,12 @@ class ActiveSession(
   val source: String, // manual | schedule
   val subjectId: Long,
   val subjectName: String,
+  val topic: String, // chapter / topic, may be empty
+  val kind: String, // study | practice | test
+  // What the session is for: "study" (counts as study time) or another activity
+  // such as sleep / deep_work / meal / rest / exercise / custom:<id>.
+  val activity: String,
+  val activityName: String, // display name for non-study activities («خواب»)
   val scheduleBlockId: Long, // -1 when not from the weekly schedule
   val startedAt: Long, // wall clock, only for the history record
   var plannedMs: Long, // total study time including "+10 minutes"
@@ -55,6 +61,18 @@ class ActiveSession(
   val isBreak: Boolean
     get() = workMs > 0 && phase == "break"
 
+  val isStudy: Boolean
+    get() = activity == "study"
+
+  /** «ریاضیات · مشتق» or «خواب» for the lock screen and notification. */
+  val label: String
+    get() =
+      when {
+        !isStudy -> activityName
+        topic.isNotEmpty() -> "$subjectName · $topic"
+        else -> subjectName
+      }
+
   fun toJson(): JSONObject =
     JSONObject()
       .put("id", id)
@@ -63,6 +81,10 @@ class ActiveSession(
       .put("source", source)
       .put("subjectId", subjectId)
       .put("subjectName", subjectName)
+      .put("topic", topic)
+      .put("kind", kind)
+      .put("activity", activity)
+      .put("activityName", activityName)
       .put("scheduleBlockId", scheduleBlockId)
       .put("startedAt", startedAt)
       .put("plannedMs", plannedMs)
@@ -88,6 +110,10 @@ class ActiveSession(
         source = o.optString("source", "manual"),
         subjectId = o.getLong("subjectId"),
         subjectName = o.optString("subjectName"),
+        topic = o.optString("topic", ""),
+        kind = o.optString("kind", "study"),
+        activity = o.optString("activity", "study"),
+        activityName = o.optString("activityName", ""),
         scheduleBlockId = o.optLong("scheduleBlockId", -1),
         startedAt = o.getLong("startedAt"),
         plannedMs = o.getLong("plannedMs"),
@@ -116,7 +142,13 @@ class ScheduleBlock(
   val subjectName: String,
   val mode: String,
   val enabled: Boolean,
-)
+  val activity: String, // "study" or another activity key
+  val activityName: String,
+  // One-off blocks (study marathon): no occurrence at or after this moment runs. 0 = weekly forever.
+  val expiresAt: Long,
+) {
+  fun runsAt(occurrence: Long) = expiresAt <= 0 || occurrence < expiresAt
+}
 
 /** Everything the native side needs while React Native is not running; pushed by JS via syncConfig. */
 class FocusConfig(val raw: JSONObject) {
@@ -136,6 +168,8 @@ class FocusConfig(val raw: JSONObject) {
   val todayKey: String = raw.optString("todayKey", "")
   val todayMinutes = raw.optInt("todayMinutes", 0)
   val darkTheme = raw.optBoolean("darkTheme", false)
+  /** «چرا درس می‌خوانم؟» — the user's own reason, shown on the lock screen. */
+  val motivation: String = raw.optString("motivation", "")
 
   val blocks: List<ScheduleBlock> =
     raw.optJSONArray("blocks")?.let { arr ->
@@ -150,6 +184,9 @@ class FocusConfig(val raw: JSONObject) {
           subjectName = b.optString("subjectName", ""),
           mode = b.optString("mode", "normal"),
           enabled = b.optBoolean("enabled", true),
+          activity = b.optString("activity", "study"),
+          activityName = b.optString("activityName", ""),
+          expiresAt = b.optLong("expiresAt", 0),
         )
       }
     } ?: emptyList()

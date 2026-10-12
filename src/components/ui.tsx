@@ -19,7 +19,7 @@ export function alpha(hex: string, a: number) {
   return hex + Math.round(a * 255).toString(16).padStart(2, '0');
 }
 
-export type Tone = 'primary' | 'strict' | 'success' | 'danger' | 'warning' | 'neutral';
+export type Tone = 'primary' | 'strict' | 'success' | 'danger' | 'warning' | 'neutral' | 'pink' | 'cyan' | 'orange';
 
 function toneColors(c: Colors, tone: Tone) {
   return {
@@ -29,6 +29,9 @@ function toneColors(c: Colors, tone: Tone) {
     danger: { bg: c.dangerSoft, fg: c.danger },
     warning: { bg: c.warningSoft, fg: c.warning },
     neutral: { bg: c.surfaceAlt, fg: c.textMuted },
+    pink: { bg: c.pinkSoft, fg: c.pink },
+    cyan: { bg: c.cyanSoft, fg: c.cyan },
+    orange: { bg: c.orangeSoft, fg: c.orange },
   }[tone];
 }
 
@@ -41,6 +44,7 @@ type ButtonProps = {
   loading?: boolean;
   icon?: IconName;
   style?: StyleProp<ViewStyle>;
+  textColor?: string;
 };
 
 export function Button({
@@ -52,23 +56,25 @@ export function Button({
   loading,
   icon,
   style,
+  textColor,
 }: ButtonProps) {
   const { colors } = useTheme();
   const s = useStyles();
   const bg = {
     primary: colors.primary,
-    secondary: colors.primarySoft,
+    secondary: colors.accentSoft,
     ghost: 'transparent',
     danger: colors.dangerSoft,
     strict: colors.strict,
   }[variant];
   const fg = {
     primary: colors.onPrimary,
-    secondary: colors.primary,
-    ghost: colors.primary,
+    secondary: colors.accent,
+    ghost: colors.accent,
     danger: colors.danger,
     strict: '#FFFFFF',
   }[variant];
+  const fgColor = textColor ?? fg;
   return (
     <Pressable
       accessibilityRole="button"
@@ -85,14 +91,14 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={fg} />
+        <ActivityIndicator color={fgColor} />
       ) : (
         <>
-          {icon && <Icon name={icon} size={size === 'sm' ? 18 : 20} color={fg} />}
+          {icon && <Icon name={icon} size={size === 'sm' ? 18 : 20} color={fgColor} />}
           {title ? (
             <AppText
               weight="bold"
-              color={fg}
+              color={fgColor}
               variant={size === 'lg' ? 'subtitle' : size === 'sm' ? 'caption' : 'body'}
             >
               {title}
@@ -216,6 +222,7 @@ export function ListItem({
   right,
   left,
   icon,
+  iconTone,
   danger,
   disabled,
 }: {
@@ -225,6 +232,7 @@ export function ListItem({
   right?: ReactNode;
   left?: ReactNode;
   icon?: IconName;
+  iconTone?: Tone;
   danger?: boolean;
   disabled?: boolean;
 }) {
@@ -236,7 +244,7 @@ export function ListItem({
       disabled={!onPress || disabled}
       style={({ pressed }) => [s.listItem, (pressed || disabled) && { opacity: disabled ? 0.45 : 0.7 }]}
     >
-      {icon ? <IconBadge name={icon} tone={danger ? 'danger' : 'primary'} size={36} /> : left}
+      {icon ? <IconBadge name={icon} tone={danger ? 'danger' : iconTone ?? 'primary'} size={36} /> : left}
       <View style={s.flex}>
         <AppText weight="medium" color={danger ? colors.danger : undefined}>
           {title}
@@ -259,6 +267,7 @@ export function ToggleItem({
   onChange,
   disabled,
   icon,
+  iconTone,
 }: {
   title: string;
   subtitle?: string;
@@ -266,6 +275,7 @@ export function ToggleItem({
   onChange: (v: boolean) => void;
   disabled?: boolean;
   icon?: IconName;
+  iconTone?: Tone;
 }) {
   const { colors } = useTheme();
   return (
@@ -274,6 +284,7 @@ export function ToggleItem({
       subtitle={subtitle}
       disabled={disabled}
       icon={icon}
+      iconTone={iconTone}
       right={
         <Switch
           value={value}
@@ -554,11 +565,11 @@ export function Segmented<T extends string>({
             accessibilityState={{ selected: active }}
             style={[s.segment, active && s.segmentActive]}
           >
-            {o.icon && <Icon name={o.icon} size={16} color={active ? colors.primary : colors.textMuted} />}
+            {o.icon && <Icon name={o.icon} size={16} color={active ? colors.accent : colors.textMuted} />}
             <AppText
               variant="caption"
               weight={active ? 'bold' : 'medium'}
-              color={active ? colors.primary : colors.textMuted}
+              color={active ? colors.accent : colors.textMuted}
             >
               {o.label}
             </AppText>

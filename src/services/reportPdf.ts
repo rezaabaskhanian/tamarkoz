@@ -1,5 +1,6 @@
 import { focus } from '../native/focus';
 import { FIELDS } from '../db/subjects';
+import { kindLabel } from '../db/topics';
 import type { Settings } from '../db/settings';
 import { formatDurationFa, toFaDigits } from '../utils/digits';
 import {
@@ -77,7 +78,11 @@ export function buildReportPdf(r: PeriodReport, kind: 'week' | 'month', settings
       .sort((a, b) => a.started_at - b.started_at)
       .map(x => ({
         date: formatJalaliDayMonth(x.started_at),
-        subject: x.subject_name + (x.tests_count ? ` · ${toFaDigits(x.tests_count)} تست` : ''),
+        subject:
+          x.subject_name +
+          (x.topic ? ` · ${x.topic}` : '') +
+          ` (${kindLabel(x.kind)})` +
+          (x.tests_count ? ` · ${toFaDigits(x.tests_count)} تست` : ''),
         duration: formatDurationFa(minutes(x.actual_seconds)),
         note:
           x.source === 'manual_log'

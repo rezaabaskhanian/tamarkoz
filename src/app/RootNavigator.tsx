@@ -1,4 +1,4 @@
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createBottomTabNavigator, type BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import {
   DarkTheme,
   DefaultTheme,
@@ -13,6 +13,9 @@ import {
   type NativeStackNavigationProp,
 } from '@react-navigation/native-stack';
 import { useEffect } from 'react';
+import { Pressable, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { AppText } from '../components/AppText';
 import { Icon, type IconName } from '../components/Icon';
 import { ActiveSessionScreen } from '../screens/ActiveSessionScreen';
 import { BackupScreen } from '../screens/BackupScreen';
@@ -30,15 +33,17 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { StartSessionScreen } from '../screens/StartSessionScreen';
 import { StrictIntroScreen } from '../screens/StrictIntroScreen';
 import { SubjectsScreen } from '../screens/SubjectsScreen';
+import { SubjectsTabScreen } from '../screens/SubjectsTabScreen';
 import { SummaryScreen } from '../screens/SummaryScreen';
 import { TroubleshootScreen } from '../screens/TroubleshootScreen';
 import { useApp } from '../state/AppContext';
-import { fonts, useTheme } from '../theme';
+import { fonts, makeStyles, radius, useTheme } from '../theme';
 
 export type TabParamList = {
-  Home: undefined;
   Schedule: undefined;
   Report: undefined;
+  Home: undefined;
+  Lessons: undefined;
   Settings: undefined;
 };
 
@@ -49,7 +54,7 @@ export type RootStackParamList = {
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   Permissions: { flow?: 'onboarding' | 'fix' | 'status' } | undefined;
   BlockedApps: { flow?: 'onboarding' | 'settings' } | undefined;
-  StartSession: undefined;
+  StartSession: { subjectId?: number; activity?: string } | undefined;
   StrictIntro: undefined;
   ActiveSession: { end?: string } | undefined;
   Summary: { nativeId?: string } | undefined;
@@ -73,7 +78,7 @@ const linking: LinkingOptions<RootStackParamList> = {
   config: {
     screens: {
       Tabs: {
-        screens: { Home: 'home', Schedule: 'schedule', Report: 'report', Settings: 'settings' },
+        screens: { Home: 'home', Schedule: 'schedule', Report: 'report', Lessons: 'lessons', Settings: 'settings' },
       },
       ActiveSession: 'session',
       StartSession: 'start',
@@ -84,33 +89,123 @@ const linking: LinkingOptions<RootStackParamList> = {
   },
 };
 
-const TAB_ICONS: Record<keyof TabParamList, IconName> = {
-  Home: 'home',
-  Schedule: 'calendar',
-  Report: 'chart',
-  Settings: 'settings',
+// Each tab has its own icon and its own color when active.
+const TABS: Record<keyof TabParamList, { icon: IconName; label: string; tone: 'cyan' | 'orange' | 'primary' | 'pink' | 'strict' }> = {
+  Schedule: { icon: 'eventCheck', label: 'برنامه', tone: 'cyan' },
+  Report: { icon: 'trending', label: 'گزارش', tone: 'orange' },
+  Home: { icon: 'dashboard', label: 'خانه', tone: 'primary' },
+  Lessons: { icon: 'school', label: 'درس‌ها', tone: 'pink' },
+  Settings: { icon: 'tune', label: 'تنظیمات', tone: 'strict' },
 };
 
 function Tabs() {
-  const { colors } = useTheme();
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textMuted,
-        tabBarLabelStyle: { fontFamily: fonts.medium, fontSize: 12 },
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
-        tabBarIcon: ({ color }) => <Icon name={TAB_ICONS[route.name]} color={color} />,
-      })}
-    >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'خانه' }} />
-      <Tab.Screen name="Schedule" component={ScheduleScreen} options={{ title: 'برنامه' }} />
-      <Tab.Screen name="Report" component={ReportScreen} options={{ title: 'گزارش' }} />
-      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: 'تنظیمات' }} />
+    <Tab.Navigator initialRouteName="Home" backBehavior="initialRoute" tabBar={props => <TabBar {...props} />} screenOptions={{ headerShown: false }}>
+      <Tab.Screen name="Schedule" component={ScheduleScreen} />
+      <Tab.Screen name="Report" component={ReportScreen} />
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Lessons" component={SubjectsTabScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );
 }
+
+/**
+ * Bottom bar: four regular tabs, and «خانه» in the middle as a large round button
+ * that sits above the bar. Tab order is right-to-left (first tab on the right).
+ */
+function TabBar({ state, navigation }: BottomTabBarProps) {
+  const { colors } = useTheme();
+  const s = useTabStyles();
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={[s.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      {state.routes.map((route, index) => {
+        const name = route.name as keyof TabParamList;
+        const focused = state.index === index;
+        const { icon, label, tone } = TABS[name];
+        const fg = { cyan: colors.cyan, orange: colors.orange, primary: colors.primary, pink: colors.pink, strict: colors.strict }[tone];
+        const bg = {
+          cyan: colors.cyanSoft,
+          orange: colors.orangeSoft,
+          primary: colors.primarySoft,
+          pink: colors.pinkSoft,
+          strict: colors.strictSoft,
+        }[tone];
+        const onPress = () => {
+          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+        };
+
+        if (name === 'Home') {
+          return (
+            <View key={route.key} style={s.centerSlot}>
+              <Pressable
+                onPress={onPress}
+                accessibilityRole="button"
+                accessibilityState={{ selected: focused }}
+                accessibilityLabel={label}
+                style={({ pressed }) => [s.homeButton, focused && s.homeFocused, pressed && s.pressed]}
+              >
+                <Icon name="dashboard" size={28} color="#FFFFFF" />
+              </Pressable>
+              <AppText variant="caption" weight={focused ? 'bold' : 'medium'} color={focused ? colors.primary : colors.textMuted}>
+                {label}
+              </AppText>
+            </View>
+          );
+        }
+
+        return (
+          <Pressable
+            key={route.key}
+            onPress={onPress}
+            accessibilityRole="button"
+            accessibilityState={{ selected: focused }}
+            accessibilityLabel={label}
+            style={s.tab}
+          >
+            <View style={[s.iconPill, focused && { backgroundColor: bg }]}>
+              <Icon name={icon} size={22} color={focused ? fg : colors.textMuted} />
+            </View>
+            <AppText variant="caption" weight={focused ? 'bold' : 'regular'} color={focused ? fg : colors.textMuted}>
+              {label}
+            </AppText>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const useTabStyles = makeStyles(c => ({
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: c.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: 8,
+    boxShadow: '0 -6px 24px -6px rgba(28, 32, 51, 0.12)',
+  },
+  tab: { flex: 1, alignItems: 'center', gap: 2 },
+  iconPill: { paddingHorizontal: 14, paddingVertical: 4, borderRadius: radius.pill },
+  centerSlot: { flex: 1.2, alignItems: 'center', gap: 2 },
+  homeButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginTop: -34, // lifts the button above the bar
+    backgroundColor: c.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 5,
+    borderColor: c.background,
+    boxShadow: '0 8px 20px -4px rgba(62, 91, 219, 0.45)',
+  },
+  homeFocused: { backgroundColor: c.primaryDeep },
+  pressed: { transform: [{ scale: 0.94 }] },
+}));
 
 /** Opens the summary when a session ends while the app is in front (F08). */
 function SessionEndWatcher() {

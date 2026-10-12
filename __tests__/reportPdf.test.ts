@@ -21,6 +21,10 @@ const session = (day: number, sec: number, extra = {}) => ({
   tests_count: null,
   schedule_block_id: null,
   native_id: null,
+  topic: null,
+  kind: 'study' as const,
+  activity: 'study',
+  activity_name: null,
   ...extra,
 });
 

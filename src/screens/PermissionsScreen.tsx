@@ -5,7 +5,7 @@ import { useNav, type RootStackParamList } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
 import { Icon, type IconName } from '../components/Icon';
 import { Screen } from '../components/Screen';
-import { Button, Card, IconBadge, Pill, Row } from '../components/ui';
+import { Button, Card, IconBadge, Pill, Row, type Tone } from '../components/ui';
 import { focus, type PermissionKind, type PermissionStatus } from '../native/focus';
 import { hasRequiredPermissions, useApp } from '../state/AppContext';
 import { spacing, useTheme } from '../theme';
@@ -19,6 +19,15 @@ type Step = {
   icon: IconName;
   granted: (p: PermissionStatus) => boolean | null; // null = can't be detected
   visible?: (p: PermissionStatus) => boolean;
+};
+
+const STEP_TONES: Record<PermissionKind, Tone> = {
+  usage: 'primary',
+  overlay: 'strict',
+  notifications: 'orange',
+  battery: 'cyan',
+  autostart: 'pink',
+  exactAlarm: 'warning',
 };
 
 const LEVEL_LABEL: Record<Step['level'], string> = {
@@ -144,7 +153,7 @@ export function PermissionsScreen() {
         return (
           <Card key={st.kind}>
             <Row gap={spacing.md} style={{ alignItems: 'flex-start' }}>
-              <IconBadge name={st.icon} tone={g ? 'success' : st.level === 'required' ? 'primary' : 'neutral'} size={44} />
+              <IconBadge name={st.icon} tone={g ? 'success' : STEP_TONES[st.kind]} size={44} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Row style={{ justifyContent: 'space-between' }}>
                   <AppText weight="bold" style={{ flex: 1 }}>

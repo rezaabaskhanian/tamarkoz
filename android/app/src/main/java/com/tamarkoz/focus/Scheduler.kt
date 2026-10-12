@@ -109,7 +109,7 @@ object Scheduler {
       for (b in cfg.blocks) {
         if (!b.enabled) continue
         val occ = nextOccurrence(b, now)
-        if (occ < 0) continue
+        if (occ < 0 || !b.runsAt(occ)) continue
         if (cfg.scheduleReminder && occ - REMIND_BEFORE_MS > now) {
           val pi =
             Alarms.pending(ctx, codeRemind(b.id)) {
@@ -170,7 +170,7 @@ object Scheduler {
     store.setLastHandled(blockId, occurrence)
     Notifications.cancelBlockReminder(ctx, blockId)
     val b = cfg.blocks.find { it.id == blockId } ?: return
-    if (!b.enabled || !cfg.scheduleEnabled || !cfg.isPremium()) return
+    if (!b.enabled || !cfg.scheduleEnabled || !cfg.isPremium() || !b.runsAt(occurrence)) return
     if (store.isSkipped(blockId, occurrence)) return
     // Another session is running: this block does not run.
     if (SessionEngine.active(ctx) != null) return
@@ -185,7 +185,7 @@ object Scheduler {
   fun onRemind(ctx: Context, blockId: Long, occurrence: Long) {
     val cfg = FocusStore(ctx).config()
     val b = cfg.blocks.find { it.id == blockId } ?: return
-    if (!b.enabled || !cfg.scheduleEnabled || !cfg.isPremium() || !cfg.scheduleReminder) return
+    if (!b.enabled || !cfg.scheduleEnabled || !cfg.isPremium() || !cfg.scheduleReminder || !b.runsAt(occurrence)) return
     if (SessionEngine.active(ctx) != null) return
     Notifications.blockReminder(ctx, b, occurrence)
   }
@@ -211,7 +211,7 @@ object Scheduler {
     for (b in cfg.blocks) {
       if (!b.enabled) continue
       val occ = lastOccurrence(b, now)
-      if (occ <= 0 || occ <= store.lastHandled(b.id)) continue
+      if (occ <= 0 || occ <= store.lastHandled(b.id) || !b.runsAt(occ)) continue
       if (now - occ <= LATE_START_MS) {
         onStart(ctx, b.id, occ)
       } else {

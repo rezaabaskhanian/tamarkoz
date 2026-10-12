@@ -1,15 +1,18 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+
 import { useNav } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
 import { Icon } from '../components/Icon';
 import { JalaliDatePicker, NumberInput } from '../components/Pickers';
 import { Screen } from '../components/Screen';
+import { TopicPicker } from '../components/TopicPicker';
 import { Button, Card, Chip, Row } from '../components/ui';
 import { addManualLog } from '../db/sessions';
+import { touchTopic, type SessionKind } from '../db/topics';
 import { useApp } from '../state/AppContext';
 import { useTheme } from '../theme';
 import { formatJalaliDateWithWeekday, startOfDay } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
 
 const MAX_MINUTES = 12 * 60;
 
@@ -24,6 +27,8 @@ export function ManualLogScreen() {
   const [day, setDay] = useState(startOfDay(Date.now()));
   const [minutes, setMinutes] = useState<number | null>(60);
   const [picker, setPicker] = useState(false);
+  const [topic, setTopic] = useState<string | null>(null);
+  const [kind, setKind] = useState<SessionKind>('study');
   const [busy, setBusy] = useState(false);
 
   const valid = subjectId != null && minutes != null && minutes >= 1 && minutes <= MAX_MINUTES;
@@ -31,11 +36,12 @@ export function ManualLogScreen() {
   const save = async () => {
     if (!valid) return;
     if (day > startOfDay(Date.now())) {
-      Alert.alert('تاریخ آینده', 'برای روزهای آینده نمی‌شود ساعت مطالعه ثبت کرد.');
+      showAlert('تاریخ آینده', 'برای روزهای آینده نمی‌شود ساعت مطالعه ثبت کرد.');
       return;
     }
     setBusy(true);
-    await addManualLog(subjectId!, day, minutes!);
+    await addManualLog(subjectId!, day, minutes!, topic ?? '', kind);
+    if (topic) await touchTopic(subjectId!, topic);
     bumpData();
     setBusy(false);
     nav.goBack();
@@ -55,6 +61,9 @@ export function ManualLogScreen() {
             ))}
           </Row>
         )}
+      </Card>
+      <Card>
+        <TopicPicker subjectId={subjectId} topic={topic} onTopic={setTopic} kind={kind} onKind={setKind} />
       </Card>
       <Card onPress={() => setPicker(true)}>
         <AppText weight="bold">روز</AppText>

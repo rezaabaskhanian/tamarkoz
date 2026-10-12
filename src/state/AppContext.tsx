@@ -9,10 +9,10 @@ import {
   type ReactNode,
 } from 'react';
 import { AppState } from 'react-native';
-import { FREE_BLOCKED_APPS_LIMIT, PRODUCT_PASS } from '../config';
+import { FREE_BLOCKED_APPS_LIMIT } from '../config';
 import { listBlockedApps, type BlockedApp } from '../db/blockedApps';
 import { listEntitlements, premiumUntil, type Entitlement } from '../db/entitlement';
-import { listBlocks } from '../db/schedule';
+import { deleteExpiredBlocks, listBlocks } from '../db/schedule';
 import { importFinished } from '../db/sessions';
 import { loadSettings, saveSetting, SETTING_DEFAULTS, type SettingKey, type Settings } from '../db/settings';
 import { listSubjects, type Subject } from '../db/subjects';
@@ -22,6 +22,7 @@ import {
   type FinishedSession,
   type PermissionStatus,
 } from '../native/focus';
+import { access as computeAccess, trialEnd, type Access } from '../services/entitlement';
 import { restorePurchases } from '../services/purchases';
 import { todaySummary } from '../services/reports';
 import { dayKey } from '../utils/jalali';
@@ -34,6 +35,8 @@ type AppCtx = {
   entitlements: Entitlement[];
   premiumUntil: number;
   isPremium: boolean;
+  /** Purchase vs. 7-day free trial details for the purchase and settings screens. */
+  access: Access;
   active: ActiveSession | null;
   permissions: PermissionStatus | null;
   /** Increments whenever study data changes, so screens can reload their queries. */
@@ -71,9 +74,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dataVersion, setDataVersion] = useState(0);
   const [justEnded, setJustEnded] = useState<FinishedSession | null>(null);
   const [scheduleVersion, setScheduleVersion] = useState(0);
+  const [trialEndsAt, setTrialEndsAt] = useState(0);
 
-  const until = premiumUntil(entitlements);
-  const isPremium = until > Date.now();
+  // Premium = a valid purchase or the free trial (dataVersion also ticks on app resume,
+  // so an expiry is noticed without restarting).
+  const acc = useMemo(
+    () => computeAccess(premiumUntil(entitlements), trialEndsAt),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entitlements, trialEndsAt, dataVersion],
+  );
+  const until = acc.until;
+  const isPremium = acc.premium;
 
   const bumpData = useCallback(() => setDataVersion(v => v + 1), []);
 
@@ -116,6 +127,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [bumpData]);
 
   const reloadAll = useCallback(async () => {
+    await deleteExpiredBlocks().catch(() => 0); // finished study marathons
     const [st, sub, apps, ent] = await Promise.all([
       loadSettings(),
       listSubjects(),
@@ -133,6 +145,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Initial load.
   useEffect(() => {
     (async () => {
+      focus
+        .deviceInfo()
+        .then(d => setTrialEndsAt(trialEnd(d.firstInstallTime)))
+        .catch(() => {});
       await reloadAll();
       try {
         await drain();
@@ -184,9 +200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const now = Date.now();
         const lastSubject =
           subjects.find(s => String(s.id) === settings.last_subject_id) ?? subjects[0];
-        const premium = premiumUntil(entitlements, now) > now;
-        const pass = entitlements.find(e => e.product_id === PRODUCT_PASS);
-        const onlyPass = premium && entitlements.every(e => e.product_id === PRODUCT_PASS);
+        const premium = acc.premium;
         focus.syncConfig({
           // Free users keep their list, but only the first three apps are enforced.
           blockedApps: blockedApps
@@ -202,8 +216,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
             subjectName: b.subject_name ?? '',
             mode: b.mode,
             enabled: b.enabled === 1,
+            activity: b.activity,
+            activityName: b.activity_name ?? '',
+            expiresAt: b.expires_at ?? 0,
           })),
-          premiumUntil: premiumUntil(entitlements, now),
+          premiumUntil: acc.until,
           blockSystemSettingsInStrict: settings.block_system_settings_in_strict === '1',
           defaultSubjectId: lastSubject?.id ?? -1,
           defaultSubjectName: lastSubject?.name ?? '',
@@ -212,18 +229,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
           dailyReminder: settings.daily_reminder_enabled === '1',
           dailyReminderMinute: Number(settings.daily_reminder_time) || 1020,
           expiryReminder: settings.notif_expiry === '1',
-          expiryReminderAt:
-            onlyPass && pass?.expires_at ? pass.expires_at - 3 * 86_400_000 : 0,
+          // Reminder before access ends: 3 days before a purchase expires, 1 day before the trial does.
+          expiryReminderAt: acc.premium
+            ? acc.until - (acc.source === 'trial' ? 1 : 3) * 86_400_000
+            : 0,
           examDate: Number(settings.exam_date) || 0,
           todayKey: dayKey(now),
           todayMinutes: Math.floor(today.total / 60),
           darkTheme: settings.theme === 'dark',
+          motivation: settings.motivation.trim(),
         });
       } catch {
         // retried on the next change
       }
     }, 300);
-  }, [ready, settings, subjects, blockedApps, entitlements, dataVersion, scheduleVersion]);
+  }, [ready, settings, subjects, blockedApps, acc, dataVersion, scheduleVersion]);
 
   const value = useMemo<AppCtx>(
     () => ({
@@ -234,6 +254,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       entitlements,
       premiumUntil: until,
       isPremium,
+      access: acc,
       active,
       permissions,
       dataVersion,
@@ -257,6 +278,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       entitlements,
       until,
       isPremium,
+      acc,
       active,
       permissions,
       dataVersion,

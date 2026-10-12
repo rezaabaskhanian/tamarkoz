@@ -185,11 +185,15 @@ export function TextField({
   onChange,
   placeholder,
   autoFocus,
+  maxLength = 40,
+  multiline,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
+  maxLength?: number;
+  multiline?: boolean;
 }) {
   const { colors } = useTheme();
   const s = useStyles();
@@ -201,7 +205,8 @@ export function TextField({
       placeholder={placeholder}
       placeholderTextColor={colors.textMuted}
       autoFocus={autoFocus}
-      maxLength={40}
+      maxLength={maxLength}
+      multiline={multiline}
     />
   );
 }

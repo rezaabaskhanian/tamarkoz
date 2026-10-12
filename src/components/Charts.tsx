@@ -72,7 +72,7 @@ export function BarChart({
                 s.bar,
                 {
                   height: Math.max(v > 0 ? 4 : 0, (v / max) * height),
-                  backgroundColor: i === highlight ? colors.primary : colors.primarySoft,
+                  backgroundColor: i === highlight ? colors.accent : colors.accentSoft,
                 },
               ]}
             />

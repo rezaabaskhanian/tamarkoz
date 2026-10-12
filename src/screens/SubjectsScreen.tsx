@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { AppText } from '../components/AppText';
 import { Icon } from '../components/Icon';
 import { TextField } from '../components/Pickers';
@@ -18,6 +18,7 @@ import {
 } from '../db/subjects';
 import { useApp } from '../state/AppContext';
 import { radius, spacing, useTheme } from '../theme';
+import { showAlert } from '../components/Dialog';
 
 /** F09: add, rename, recolor, reorder; subjects with history are archived, not deleted. */
 export function SubjectsScreen() {
@@ -54,10 +55,10 @@ export function SubjectsScreen() {
 
   const remove = (s: Subject) => {
     if (active?.subjectId === s.id) {
-      Alert.alert('در حال استفاده', 'این درس در جلسه‌ی فعلی است. بعد از جلسه دوباره امتحان کن.');
+      showAlert('در حال استفاده', 'این درس در جلسه‌ی فعلی است. بعد از جلسه دوباره امتحان کن.');
       return;
     }
-    Alert.alert(`حذف «${s.name}»؟`, 'اگر جلسه‌ای با این درس ثبت شده باشد، بایگانی می‌شود تا گزارش‌های قبلی درست بمانند.', [
+    showAlert(`حذف «${s.name}»؟`, 'اگر جلسه‌ای با این درس ثبت شده باشد، بایگانی می‌شود تا گزارش‌های قبلی درست بمانند.', [
       { text: 'نه', style: 'cancel' },
       {
         text: 'حذف',
@@ -66,7 +67,7 @@ export function SubjectsScreen() {
           const r = await removeSubject(s.id);
           setEditing(null);
           await reload();
-          if (r === 'archived') Alert.alert('بایگانی شد', 'درس از فهرست برداشته شد ولی در گزارش‌ها می‌ماند.');
+          if (r === 'archived') showAlert('بایگانی شد', 'درس از فهرست برداشته شد ولی در گزارش‌ها می‌ماند.');
         },
       },
     ]);

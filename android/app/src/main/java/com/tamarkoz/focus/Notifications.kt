@@ -66,7 +66,7 @@ object Notifications {
       when {
         s.state == SessionState.EMERGENCY_WAIT -> "خروج اضطراری در انتظار تأیید"
         s.isBreak -> "استراحت · اپ‌ها باز هستند"
-        else -> "جلسه‌ی ${s.subjectName}" + if (s.isStrict) " · حالت سخت" else ""
+        else -> (if (s.isStudy) "جلسه‌ی ${s.label}" else s.label) + if (s.isStrict) " · حالت سخت" else ""
       }
     val remainingSec = s.remainingMs / 1000
     val countdownMs = if (s.isBreak) (s.breakMs - s.phaseMs) else s.remainingMs
@@ -85,11 +85,14 @@ object Notifications {
       .build()
   }
 
-  fun finished(ctx: Context, subject: String, studiedSec: Long, sound: Boolean) {
+  fun finished(ctx: Context, label: String, isStudy: Boolean, studiedSec: Long, sound: Boolean) {
     val n =
       base(ctx, if (sound) CH_FINISH else CH_FINISH_SILENT)
         .setContentTitle("جلسه تمام شد 🎉")
-        .setContentText("${Fa.duration(studiedSec / 60)} $subject خواندی.")
+        .setContentText(
+          if (isStudy) "${Fa.duration(studiedSec / 60)} $label خواندی."
+          else "${Fa.duration(studiedSec / 60)} $label بدون گوشی 👏"
+        )
         .setAutoCancel(true)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setDefaults(if (sound) NotificationCompat.DEFAULT_ALL else NotificationCompat.DEFAULT_VIBRATE)
@@ -136,7 +139,12 @@ object Notifications {
         skip,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
-    val subject = if (block.subjectName.isNotEmpty()) " (${block.subjectName})" else ""
+    val subject =
+      when {
+        block.activity != "study" -> " (${block.activityName})"
+        block.subjectName.isNotEmpty() -> " (${block.subjectName})"
+        else -> ""
+      }
     val n =
       base(ctx, CH_REMINDERS)
         .setContentTitle("۵ دقیقه تا شروع جلسه$subject")
@@ -155,8 +163,8 @@ object Notifications {
   fun daily(ctx: Context) {
     val n =
       base(ctx, CH_REMINDERS)
-        .setContentTitle("وقت درس خواندن است")
-        .setContentText("یک جلسه‌ی تمرکز شروع کن.")
+        .setContentTitle("امروز وقت تمرین است 📚")
+        .setContentText("یک جلسه‌ی تمرکز شروع کن؛ هر دقیقه به کنکور نزدیک‌ترت می‌کند.")
         .setAutoCancel(true)
         .setContentIntent(openApp(ctx, "start"))
         .build()
@@ -166,8 +174,8 @@ object Notifications {
   fun expiry(ctx: Context) {
     val n =
       base(ctx, CH_REMINDERS)
-        .setContentTitle("اعتبار نسخه‌ی کامل رو به پایان است")
-        .setContentText("سه روز دیگر اعتبار خریدت تمام می‌شود.")
+        .setContentTitle("دسترسی نسخه‌ی کامل به‌زودی تمام می‌شود")
+        .setContentText("برای ادامه، اشتراک ۱ یا ۶ ماهه را از بازار بخر. داده‌هایت پاک نمی‌شود.")
         .setAutoCancel(true)
         .setContentIntent(openApp(ctx, "purchase"))
         .build()

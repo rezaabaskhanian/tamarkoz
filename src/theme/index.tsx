@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 
 // Palette from the "Focused Maturity" design system (memory/ui/focused_maturity/DESIGN.md).
+// (A green/indigo palette after the Roots app was tried on 2026-10-11 and reverted.)
 const light = {
   background: '#F7F7FC',
   surface: '#FFFFFF',
@@ -18,6 +19,8 @@ const light = {
   primaryDeep: '#1F40C2', // selected chips / tiles
   primarySoft: '#E8EBFD',
   onPrimary: '#FFFFFF',
+  accent: '#3E5BDB', // charts, links, secondary actions
+  accentSoft: '#E8EBFD',
   border: '#ECEDF5',
   danger: '#D93B3B',
   dangerSoft: '#FCE8E8',
@@ -27,6 +30,12 @@ const light = {
   warningSoft: '#FBF0DD',
   strict: '#7A4FD6',
   strictSoft: '#F1EAFE',
+  pink: '#E8508C',
+  pinkSoft: '#FDE8F1',
+  cyan: '#1BA6C2',
+  cyanSoft: '#E0F5F9',
+  orange: '#F07C2B',
+  orangeSoft: '#FEEFE3',
   overlay: 'rgba(15, 18, 34, 0.45)',
   shadow: '0 4px 20px -2px rgba(62, 91, 219, 0.06), 0 2px 6px -1px rgba(28, 32, 51, 0.03)',
 };
@@ -43,6 +52,8 @@ const dark: Colors = {
   primaryDeep: '#7189F0',
   primarySoft: '#232C52',
   onPrimary: '#0E1222',
+  accent: '#7189F0',
+  accentSoft: '#232C52',
   border: '#2A3150',
   danger: '#F06A6A',
   dangerSoft: '#3A1E24',
@@ -52,6 +63,12 @@ const dark: Colors = {
   warningSoft: '#3A2E17',
   strict: '#A585F0',
   strictSoft: '#2A2147',
+  pink: '#F27BA8',
+  pinkSoft: '#3A1E2B',
+  cyan: '#45C3DB',
+  cyanSoft: '#123138',
+  orange: '#F59A55',
+  orangeSoft: '#3A2617',
   overlay: 'rgba(0, 0, 0, 0.6)',
   shadow: 'none', // dark mode separates surfaces by tone, not shadow
 };
@@ -64,7 +81,7 @@ export const fonts = {
 };
 
 export const spacing = { xs: 4, sm: 8, md: 16, card: 20, lg: 24, xl: 32 };
-export const radius = { sm: 8, chip: 12, md: 16, lg: 22, pill: 999 };
+export const radius = { sm: 8, chip: 12, md: 16, lg: 22, sheet: 28, pill: 999 };
 
 export type ThemePref = 'system' | 'light' | 'dark';
 type Theme = { colors: Colors; dark: boolean };

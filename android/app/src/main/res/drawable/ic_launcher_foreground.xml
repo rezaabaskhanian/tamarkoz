@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App icon glyph: a round padlock whose body is a focus ring (lock + focus).
+     108dp adaptive-icon canvas; the glyph stays inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- shackle -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M44,48 V40 A10,10 0 0 1 64,40 V48"
+        android:strokeWidth="6"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round" />
+    <!-- focus ring (lock body) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M38,62 A16,16 0 1 1 70,62 A16,16 0 1 1 38,62 Z"
+        android:strokeWidth="6"
+        android:strokeColor="#FFFFFF" />
+    <!-- center dot -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48.5,62 A5.5,5.5 0 1 1 59.5,62 A5.5,5.5 0 1 1 48.5,62 Z" />
+</vector>

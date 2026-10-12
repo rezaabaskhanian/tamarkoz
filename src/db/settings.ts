@@ -8,7 +8,7 @@ export const SETTING_DEFAULTS = {
   daily_goal_minutes: '0', // 0 = no goal (F20)
   block_system_settings_in_strict: '1',
   emergency_used_on: '', // yyyy-MM-dd
-  daily_reminder_enabled: '0',
+  daily_reminder_enabled: '0', // «امروز وقت تمرین است»; off by default, user turns it on in settings
   daily_reminder_time: '1020', // minute of day (17:00)
   schedule_enabled: '1',
   notif_schedule_reminder: '1',
@@ -18,9 +18,11 @@ export const SETTING_DEFAULTS = {
   strict_intro_seen: '0',
   last_subject_id: '',
   last_duration: '45',
+  last_kind: 'study', // study | practice | test
   pomodoro_work: '25',
   pomodoro_break: '5',
   theme: 'system', // system | light | dark (F23)
+  motivation: '', // «چرا درس می‌خوانم؟» — shown on home and the lock screen
 };
 
 export type SettingKey = keyof typeof SETTING_DEFAULTS;

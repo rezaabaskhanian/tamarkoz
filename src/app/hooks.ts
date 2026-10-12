@@ -1,8 +1,9 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+
 import { useApp } from '../state/AppContext';
 import { useNav, type PurchaseReason } from './RootNavigator';
+import { showAlert } from '../components/Dialog';
 
 /**
  * Opens the purchase screen — except during an active session: the purchase screen
@@ -14,7 +15,7 @@ export function usePaywall() {
   return useCallback(
     (reason: PurchaseReason) => {
       if (active) {
-        Alert.alert('بعد از جلسه', 'این بخش در نسخه‌ی کامل است. بعد از پایان جلسه می‌توانی آن را ببینی.');
+        showAlert('بعد از جلسه', 'این بخش در نسخه‌ی کامل است. بعد از پایان جلسه می‌توانی آن را ببینی.');
         return;
       }
       nav.navigate('Purchase', { reason });

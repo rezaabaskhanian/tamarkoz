@@ -76,3 +76,6 @@ yarn-error.log
 
 # Stitch design export (reference only, not part of the app)
 memory/ui/
+
+# Release signing (never commit)
+android/keystore.properties

@@ -1,11 +1,12 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, View } from 'react-native';
+import { Linking, PermissionsAndroid } from 'react-native';
 import { usePaywall } from '../app/hooks';
 import { useNav } from '../app/RootNavigator';
 import { AppText } from '../components/AppText';
 import { JalaliDatePicker, NumberInput, TimeStepper } from '../components/Pickers';
 import { Screen } from '../components/Screen';
+import { MotivationSheet } from '../components/Motivation';
 import { Sheet } from '../components/Sheet';
 import {
   Button,
@@ -19,15 +20,16 @@ import {
   Segmented,
   ToggleItem,
 } from '../components/ui';
-import { APP_VERSION, FREE_BLOCKED_APPS_LIMIT, SUPPORT_EMAIL } from '../config';
-import { getDbInfo, type DbInfo } from '../db';
+import { FREE_BLOCKED_APPS_LIMIT, SUPPORT_EMAIL, SUPPORT_TELEGRAM } from '../config';
 import { FIELDS, type Field } from '../db/subjects';
 import { focus } from '../native/focus';
 import { clearAllData } from '../services/backup';
+import { daysLeft } from '../services/entitlement';
 import { hasRequiredPermissions, useApp } from '../state/AppContext';
 import type { ThemePref } from '../theme';
 import { formatDurationFa, toFaDigits } from '../utils/digits';
-import { formatJalaliDate, formatJalaliDateWithWeekday, formatMinuteOfDay, toJalali } from '../utils/jalali';
+import { formatJalaliDate, formatMinuteOfDay, toJalali } from '../utils/jalali';
+import { showAlert } from '../components/Dialog';
 
 const GOALS = [0, 120, 240, 360, 480, 600];
 
@@ -35,16 +37,23 @@ export function SettingsScreen() {
   const nav = useNav();
   const paywall = usePaywall();
   const app = useApp();
-  const { settings, setSetting, active, isPremium, premiumUntil, permissions, blockedApps, subjects } = app;
+  const { settings, setSetting, active, isPremium, access, permissions, blockedApps, subjects } = app;
   const strictNow = active?.mode === 'strict';
 
   const [examPicker, setExamPicker] = useState(false);
   const [fieldSheet, setFieldSheet] = useState(false);
   const [goalSheet, setGoalSheet] = useState(false);
   const [reminderSheet, setReminderSheet] = useState(false);
+  const [motivationSheet, setMotivationSheet] = useState(false);
   const [goal, setGoal] = useState<number | null>(Number(settings.daily_goal_minutes) || 0);
   const [reminderTime, setReminderTime] = useState(Number(settings.daily_reminder_time) || 1020);
   const [admin, setAdmin] = useState(false);
+  const [version, setVersion] = useState('');
+
+  useEffect(() => {
+    // The version comes from android/gradle.properties via BuildConfig.
+    focus.deviceInfo().then(d => setVersion(d.appVersion)).catch(() => {});
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -58,16 +67,16 @@ export function SettingsScreen() {
 
   const clearData = () => {
     if (active) {
-      Alert.alert('جلسه در حال اجراست', 'وسط جلسه نمی‌شود داده‌ها را پاک کرد.');
+      showAlert('جلسه در حال اجراست', 'وسط جلسه نمی‌شود داده‌ها را پاک کرد.');
       return;
     }
-    Alert.alert('پاک کردن همه‌ی داده‌ها؟', 'همه‌ی جلسه‌ها، درس‌ها، برنامه و تنظیمات پاک می‌شود.', [
+    showAlert('پاک کردن همه‌ی داده‌ها؟', 'همه‌ی جلسه‌ها، درس‌ها، برنامه و تنظیمات پاک می‌شود.', [
       { text: 'نه', style: 'cancel' },
       {
         text: 'ادامه',
         style: 'destructive',
         onPress: () =>
-          Alert.alert('مطمئنی؟', 'این کار برگشت ندارد. خرید از بازار با «بازیابی خرید» برمی‌گردد.', [
+          showAlert('مطمئنی؟', 'این کار برگشت ندارد. خرید از بازار با «بازیابی خرید» برمی‌گردد.', [
             { text: 'نه، منصرف شدم', style: 'cancel' },
             {
               text: 'بله، همه را پاک کن',
@@ -88,9 +97,18 @@ export function SettingsScreen() {
     <Screen title="تنظیمات">
       <Card>
         <ListItem
-          title={isPremium ? 'نسخه‌ی کامل فعال است' : 'نسخه‌ی رایگان'}
-          subtitle={isPremium ? `اعتبار تا ${formatJalaliDate(premiumUntil)}` : 'دیدن امکانات نسخه‌ی کامل و بازیابی خرید'}
+          title={
+            access.source === 'purchase'
+              ? 'اشتراک فعال است'
+              : access.source === 'trial'
+                ? `دوره‌ی رایگان · ${toFaDigits(daysLeft(access.until))} روز مانده`
+                : 'نسخه‌ی رایگان'
+          }
+          subtitle={
+            isPremium ? `تا ${formatJalaliDate(access.until)}` : 'خرید اشتراک ۱ یا ۶ ماهه و بازیابی خرید'
+          }
           icon="star"
+          iconTone="warning"
           onPress={() => (isPremium ? nav.navigate('Purchase', { reason: 'settings' }) : paywall('settings'))}
         />
       </Card>
@@ -98,15 +116,18 @@ export function SettingsScreen() {
       <SectionTitle>کنکور</SectionTitle>
       <Card>
         <ListItem title="تاریخ کنکور"
-          icon="calendar" subtitle={exam ? formatJalaliDate(exam) : 'تعیین نشده'} onPress={() => setExamPicker(true)} />
+          icon="calendar"
+          iconTone="cyan" subtitle={exam ? formatJalaliDate(exam) : 'تعیین نشده'} onPress={() => setExamPicker(true)} />
         <Divider />
         <ListItem title="رشته"
-          icon="book" subtitle={fieldLabel} onPress={() => setFieldSheet(true)} />
+          icon="book"
+          iconTone="orange" subtitle={fieldLabel} onPress={() => setFieldSheet(true)} />
         {settings.exam_countdown_hidden === '1' && (
           <>
             <Divider />
             <ListItem title="نمایش دوباره‌ی شمارش معکوس"
-          icon="calendar" onPress={() => setSetting('exam_countdown_hidden', '0')} />
+          icon="calendar"
+          iconTone="cyan" onPress={() => setSetting('exam_countdown_hidden', '0')} />
           </>
         )}
       </Card>
@@ -114,11 +135,13 @@ export function SettingsScreen() {
       <SectionTitle>مطالعه</SectionTitle>
       <Card>
         <ListItem title="درس‌ها"
-          icon="book" subtitle={`${toFaDigits(subjects.length)} درس`} onPress={() => nav.navigate('Subjects')} />
+          icon="book"
+          iconTone="orange" subtitle={`${toFaDigits(subjects.length)} درس`} onPress={() => nav.navigate('Subjects')} />
         <Divider />
         <ListItem
           title="اپ‌های ممنوع"
           icon="block"
+          iconTone="pink"
           subtitle={`${toFaDigits(blockedApps.length)} اپ${!isPremium ? ` · رایگان تا ${toFaDigits(FREE_BLOCKED_APPS_LIMIT)} اپ` : ''}`}
           onPress={() => nav.navigate('BlockedApps', { flow: 'settings' })}
         />
@@ -126,12 +149,22 @@ export function SettingsScreen() {
         <ListItem
           title="هدف روزانه"
           icon="target"
+          iconTone="strict"
           subtitle={Number(settings.daily_goal_minutes) ? formatDurationFa(Number(settings.daily_goal_minutes)) : 'بدون هدف'}
           onPress={() => setGoalSheet(true)}
         />
         <Divider />
+        <ListItem
+          title="چرا درس می‌خوانم؟"
+          icon="sparkle"
+          iconTone="pink"
+          subtitle={settings.motivation.trim() || 'روی صفحه‌ی قفل نشان داده می‌شود'}
+          onPress={() => setMotivationSheet(true)}
+        />
+        <Divider />
         <ListItem title="ثبت دستی ساعت مطالعه"
-          icon="add" onPress={() => nav.navigate('ManualLog')} />
+          icon="add"
+          iconTone="cyan" onPress={() => nav.navigate('ManualLog')} />
       </Card>
 
       <SectionTitle>قفل</SectionTitle>
@@ -139,6 +172,7 @@ export function SettingsScreen() {
         <ListItem
           title="وضعیت مجوزها"
           icon="shield"
+          iconTone="primary"
           subtitle={hasRequiredPermissions(permissions) ? 'مجوزهای اجباری فعال‌اند' : 'یک مجوز اجباری خاموش است'}
           danger={!hasRequiredPermissions(permissions)}
           onPress={() => nav.navigate('Permissions', { flow: 'status' })}
@@ -147,6 +181,7 @@ export function SettingsScreen() {
         <ToggleItem
           title="قفل تنظیمات گوشی در حالت سخت"
           icon="lock"
+          iconTone="strict"
           subtitle={strictNow ? 'در جلسه‌ی سخت قابل تغییر نیست' : 'برنامه‌ی تنظیمات و صفحه‌ی حذف برنامه‌ها هم قفل می‌شوند'}
           value={settings.block_system_settings_in_strict === '1'}
           onChange={toggle('block_system_settings_in_strict')}
@@ -156,13 +191,14 @@ export function SettingsScreen() {
         <ListItem
           title="محافظت در برابر حذف اپ"
           icon="delete"
+          iconTone="pink"
           subtitle={admin ? 'فعال است' : 'حذف اپ وسط جلسه‌ی سخت را سخت‌تر می‌کند'}
           right={!isPremium && !admin ? <PremiumBadge /> : undefined}
           disabled={admin && strictNow}
           onPress={() => {
             if (!isPremium && !admin) return paywall('settings');
             if (admin) {
-              Alert.alert('غیرفعال کردن محافظت؟', '', [
+              showAlert('غیرفعال کردن محافظت؟', '', [
                 { text: 'نه', style: 'cancel' },
                 {
                   text: 'غیرفعال کن',
@@ -174,7 +210,7 @@ export function SettingsScreen() {
                 },
               ]);
             } else {
-              Alert.alert(
+              showAlert(
                 'محافظت در برابر حذف',
                 'با فعال کردن «مدیر دستگاه»، تا وقتی این دسترسی روشن است اندروید اجازه‌ی حذف اپ را نمی‌دهد. در حالت سخت تنظیمات گوشی قفل است، پس وسط جلسه نمی‌شود خاموشش کرد. بیرون از جلسه هر وقت خواستی از همین‌جا خاموشش کن.',
                 [
@@ -187,37 +223,50 @@ export function SettingsScreen() {
         />
         <Divider />
         <ListItem title="قفل کار نمی‌کند؟"
-          icon="warning" subtitle="راهنمای شیائومی، سامسونگ و هواوی" onPress={() => nav.navigate('Troubleshoot')} />
+          icon="warning"
+          iconTone="orange" subtitle="راهنمای شیائومی، سامسونگ و هواوی" onPress={() => nav.navigate('Troubleshoot')} />
         <Divider />
         <ListItem title="محدودیت‌های قفل"
-          icon="layers" onPress={() => nav.navigate('Info', { page: 'limits' })} />
+          icon="layers"
+          iconTone="cyan" onPress={() => nav.navigate('Info', { page: 'limits' })} />
       </Card>
 
       <SectionTitle>اعلان‌ها</SectionTitle>
       <Card>
         <ToggleItem title="صدای پایان جلسه"
-          icon="bell" value={settings.finish_sound === '1'} onChange={toggle('finish_sound')} />
+          icon="bell"
+          iconTone="orange" value={settings.finish_sound === '1'} onChange={toggle('finish_sound')} />
         <Divider />
         <ToggleItem
           title="یادآور نوبت برنامه"
           icon="calendar"
+          iconTone="cyan"
           subtitle="پنج دقیقه قبل از شروع"
           value={settings.notif_schedule_reminder === '1'}
           onChange={toggle('notif_schedule_reminder')}
         />
         <Divider />
         <ToggleItem
-          title="یادآور روزانه‌ی مطالعه"
+          title="یادآور «امروز وقت تمرین است»"
           icon="clock"
-          subtitle={settings.daily_reminder_enabled === '1' ? `هر روز ساعت ${formatMinuteOfDay(Number(settings.daily_reminder_time))}` : 'خاموش'}
+          iconTone="strict"
+          subtitle={
+            settings.daily_reminder_enabled === '1'
+              ? `هر روز ساعت ${formatMinuteOfDay(Number(settings.daily_reminder_time))} · برای تغییر ساعت بزن`
+              : 'خاموش'
+          }
           value={settings.daily_reminder_enabled === '1'}
           onChange={v => (v ? setReminderSheet(true) : setSetting('daily_reminder_enabled', '0'))}
         />
+        {settings.daily_reminder_enabled === '1' && (
+          <Button title="تغییر ساعت یادآور" variant="ghost" size="sm" onPress={() => setReminderSheet(true)} />
+        )}
         <Divider />
         <ToggleItem
-          title="یادآور پایان اعتبار خرید"
+          title="یادآور پایان اعتبار"
           icon="star"
-          subtitle="سه روز قبل"
+          iconTone="warning"
+          subtitle="یک روز قبل از پایان دوره‌ی رایگان، سه روز قبل از پایان اشتراک"
           value={settings.notif_expiry === '1'}
           onChange={toggle('notif_expiry')}
         />
@@ -242,29 +291,44 @@ export function SettingsScreen() {
       <SectionTitle>داده‌ها</SectionTitle>
       <Card>
         <ListItem title="پشتیبان‌گیری و بازیابی با فایل"
-          icon="layers" onPress={() => nav.navigate('Backup')} />
+          icon="layers"
+          iconTone="cyan" onPress={() => nav.navigate('Backup')} />
         <Divider />
         <ListItem title="پاک کردن همه‌ی داده‌ها"
-          icon="delete" danger disabled={Boolean(active)} onPress={clearData} />
+          icon="delete"
+          iconTone="pink" danger disabled={Boolean(active)} onPress={clearData} />
       </Card>
 
       <SectionTitle>درباره</SectionTitle>
       <Card>
         <ListItem title="درباره‌ی تمرکز"
-          icon="target" subtitle={`نسخه‌ی ${toFaDigits(APP_VERSION)}`} onPress={() => nav.navigate('Info', { page: 'about' })} />
+          icon="target"
+          iconTone="strict" subtitle={version ? `نسخه‌ی ${toFaDigits(version)}` : undefined} onPress={() => nav.navigate('Info', { page: 'about' })} />
         <Divider />
         <ListItem title="حریم خصوصی"
-          icon="lock" subtitle="هیچ داده‌ای از گوشی بیرون نمی‌رود" onPress={() => nav.navigate('Info', { page: 'privacy' })} />
+          icon="lock"
+          iconTone="strict" subtitle="هیچ داده‌ای از گوشی بیرون نمی‌رود" onPress={() => nav.navigate('Info', { page: 'privacy' })} />
         <Divider />
         <ListItem
-          title="ارتباط با پشتیبانی"
+          title="پشتیبانی در تلگرام"
           icon="share"
+          iconTone="cyan"
+          subtitle={`@${SUPPORT_TELEGRAM}`}
+          onPress={() => Linking.openURL(`https://t.me/${SUPPORT_TELEGRAM}`).catch(() => {})}
+        />
+        <Divider />
+        <ListItem
+          title="پشتیبانی با ایمیل"
+          icon="bell"
+          iconTone="orange"
           subtitle={SUPPORT_EMAIL}
-          onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('پشتیبانی تمرکز')}`).catch(() => {})}
+          onPress={() =>
+            Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('پشتیبانی تمرکز')}`).catch(() =>
+              showAlert('ایمیل پشتیبانی', SUPPORT_EMAIL),
+            )
+          }
         />
       </Card>
-
-      {__DEV__ && <DebugInfo />}
 
       <JalaliDatePicker
         visible={examPicker}
@@ -277,6 +341,8 @@ export function SettingsScreen() {
         title="تاریخ کنکور"
         minYear={toJalali(Date.now()).jy}
       />
+
+      <MotivationSheet visible={motivationSheet} onClose={() => setMotivationSheet(false)} />
 
       <Sheet visible={fieldSheet} onClose={() => setFieldSheet(false)} title="رشته">
         <Row style={{ flexWrap: 'wrap' }}>
@@ -315,38 +381,24 @@ export function SettingsScreen() {
       </Sheet>
 
       <Sheet visible={reminderSheet} onClose={() => setReminderSheet(false)} title="ساعت یادآور روزانه">
+        <AppText variant="caption" muted center>
+          هر روز همین ساعت اعلان «امروز وقت تمرین است» می‌آید.
+        </AppText>
         <TimeStepper value={reminderTime} onChange={setReminderTime} />
         <Button
-          title="روشن کن"
+          title="ذخیره"
           onPress={async () => {
             await setSetting('daily_reminder_time', String(reminderTime));
             await setSetting('daily_reminder_enabled', '1');
             setReminderSheet(false);
+            // Android 13+: the reminder can't show without the notification permission.
+            if (permissions?.notificationsRuntime && !permissions.notifications) {
+              await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+              app.refreshPermissions().catch(() => {});
+            }
           }}
         />
       </Sheet>
     </Screen>
-  );
-}
-
-/** Development-only: Jalali date and database schema check. */
-function DebugInfo() {
-  const [info, setInfo] = useState<DbInfo | null>(null);
-  useEffect(() => {
-    getDbInfo().then(setInfo).catch(() => {});
-  }, []);
-  return (
-    <Card>
-      <AppText weight="bold">اطلاعات آزمایشی</AppText>
-      <AppText variant="caption">امروز: {formatJalaliDateWithWeekday(Date.now())}</AppText>
-      {info && (
-        <View>
-          <AppText variant="caption">نسخه‌ی پایگاه داده: {toFaDigits(info.version)}</AppText>
-          <AppText variant="caption" muted>
-            {info.tables.join('، ')}
-          </AppText>
-        </View>
-      )}
-    </Card>
   );
 }

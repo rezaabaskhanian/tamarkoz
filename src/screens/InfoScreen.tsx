@@ -11,6 +11,7 @@ const PAGES: Record<'about' | 'privacy' | 'limits', { title: string; paragraphs:
       'تمرکز برای کنکوری‌هاست: در زمان مطالعه اپ‌های حواس‌پرت‌کن را قفل می‌کند، ساعت مطالعه را خودکار ثبت می‌کند و روزهای مانده تا کنکور را نشان می‌دهد.',
       'اپ بدون حساب کاربری و بدون سرور کار می‌کند.',
       'فونت: وزیرمتن، با مجوز SIL Open Font License.',
+      'پشتیبانی: تلگرام @RezaAbaskhanian · ایمیل rezaabaskhanian1367kash@gmail.com',
     ],
   },
   privacy: {

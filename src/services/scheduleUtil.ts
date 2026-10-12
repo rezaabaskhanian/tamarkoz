@@ -18,6 +18,7 @@ export function nextBlock(blocks: ScheduleBlockWithSubject[], now: number) {
   for (const b of blocks) {
     if (!b.enabled) continue;
     const at = nextOccurrence(b, now);
+    if (b.expires_at && at >= b.expires_at) continue; // marathon block already over
     if (at > 0 && (!best || at < best.at)) best = { block: b, at };
   }
   return best;

@@ -33,10 +33,12 @@ class LockOverlay(private val ctx: Context) {
   private lateinit var attemptsView: TextView
   private lateinit var endLink: TextView
   private var quote = Fa.QUOTES.random()
+  private var motivation = ""
 
   fun show(s: ActiveSession, appLabel: String) {
     if (root == null) {
       quote = Fa.QUOTES.random()
+      motivation = FocusStore(ctx).config().motivation.trim()
       val view = build()
       val params =
         WindowManager.LayoutParams(
@@ -56,10 +58,11 @@ class LockOverlay(private val ctx: Context) {
     }
     titleView.text = "$appLabel فعلاً قفل است!"
     timeView.text = Fa.clock(s.remainingMs / 1000)
-    subjectView.text = "درس جاری:  ●  ${s.subjectName}"
-    if (s.blockedAttempts > 1) {
+    subjectView.text = "درس جاری:  ●  ${s.label}"
+    // Every return to the lesson from here is a small win against the urge to scroll.
+    if (s.blockedAttempts > 0) {
       attemptsView.visibility = View.VISIBLE
-      attemptsView.text = "⚠  این جلسه ${Fa.digits(s.blockedAttempts)} بار سعی کردی بیای اینجا!"
+      attemptsView.text = "💪  مقاومت شماره‌ی ${Fa.digits(s.blockedAttempts)}؛ هر بار که برمی‌گردی، اراده‌ات قوی‌تر می‌شود."
     } else {
       attemptsView.visibility = View.GONE
     }
@@ -192,8 +195,15 @@ class LockOverlay(private val ctx: Context) {
     timeCard.addView(timeView)
     timeCard.addView(subjectView)
 
-    val quoteView = pill(text(14f, white).apply { text = "«$quote»" }, glass)
-    attemptsView = pill(text(13f, 0xFFFFC9C9.toInt(), true), 0x33D93B3B)
+    // The user's own reason beats a generic quote.
+    val quoteView =
+      pill(
+        text(14f, white, motivation.isNotEmpty()).apply {
+          text = if (motivation.isNotEmpty()) "🎯  یادت هست چرا؟\n«$motivation»" else "«$quote»"
+        },
+        glass,
+      )
+    attemptsView = pill(text(13f, 0xFFC9F2DC.toInt(), true), 0x3322A06B)
 
     val button =
       text(17f, 0xFF1B2552.toInt(), true).apply {

@@ -27,6 +27,8 @@ export type InstalledApp = {
   label: string;
   icon: string;
   suggested: boolean;
+  /** Browser or AI/search app: also locked in an «offline» session. */
+  online?: boolean;
 };
 
 export type SessionMode = 'normal' | 'strict';
@@ -38,6 +40,10 @@ export type ActiveSession = {
   source: 'manual' | 'schedule';
   subjectId: number;
   subjectName: string;
+  topic: string;
+  kind: 'study' | 'practice' | 'test';
+  activity: string;
+  activityName: string;
   scheduleBlockId: number;
   startedAt: number;
   plannedMs: number;
@@ -56,6 +62,10 @@ export type FinishedSession = {
   nativeId: string;
   subjectId: number;
   subjectName: string;
+  topic?: string;
+  kind?: 'study' | 'practice' | 'test';
+  activity?: string;
+  activityName?: string;
   mode: SessionMode;
   source: 'manual' | 'schedule';
   plannedMinutes: number;
@@ -78,6 +88,11 @@ export type PendingSkip = {
 export type StartRequest = {
   subjectId: number;
   subjectName: string;
+  topic: string;
+  kind: 'study' | 'practice' | 'test';
+  /** "study" or another activity key (sleep, deep_work, custom:<id>…). */
+  activity: string;
+  activityName: string;
   mode: SessionMode;
   plannedMinutes: number;
   blocked: string[];
@@ -107,6 +122,10 @@ export type NativeConfig = {
     subjectName: string;
     mode: SessionMode;
     enabled: boolean;
+    activity: string;
+    activityName: string;
+    /** One-off (marathon) block: occurrences at or after this don't run. 0 = weekly. */
+    expiresAt: number;
   }[];
   premiumUntil: number;
   blockSystemSettingsInStrict: boolean;
@@ -122,6 +141,7 @@ export type NativeConfig = {
   todayKey: string;
   todayMinutes: number;
   darkTheme: boolean;
+  motivation: string;
 };
 
 const parse = <T>(s: string): T | null => (s ? (JSON.parse(s) as T) : null);
@@ -136,7 +156,14 @@ export const focus = {
   async installedApps(): Promise<InstalledApp[]> {
     return JSON.parse(await NativeFocus.getInstalledApps());
   },
-  async deviceInfo(): Promise<{ manufacturer: string; brand: string; sdk: number }> {
+  async deviceInfo(): Promise<{
+    manufacturer: string;
+    brand: string;
+    sdk: number;
+    appVersion: string;
+    appVersionCode: number;
+    firstInstallTime: number;
+  }> {
     return JSON.parse(await NativeFocus.getDeviceInfo());
   },
   syncConfig(config: NativeConfig) {
