@@ -1,8 +1,8 @@
 # باقی‌مانده و تصمیم‌های صاحب پروژه
 
 - [x] ساخت و اجرای اولین APK (روی امولاتور اجرا شد).
-- [ ] کلید RSA بازار در `BAZAAR_RSA_KEY` و ساخت دو محصول in-app در پیشخان: `tamarkoz_1m` و `tamarkoz_6m`.
-- [ ] شناسه‌ی پکیج نهایی (`ir.PREFIX.tamarkoz`) — فعلاً `com.tamarkoz`.
+- [x] کلید RSA بازار در `android/gradle.properties` (`BAZAAR_RSA_KEY`)؛ محصولات `tamarkoz_1m` (۳۰ روز) و `tamarkoz_6m` (۱۸۰ روز) در پیشخان ساخته شدند. APP_VERSION_CODE=2 برای آپلود دوم.
+- [x] شناسه‌ی پکیج نهایی: `com.rezaabaskhanian.tamarkoz` (فقط applicationId؛ namespace و پکیج کد `com.tamarkoz` ماند). بعد از اولین آپلود بازار دیگر عوض نشود.
 - [x] ایمیل پشتیبانی و تلگرام در `src/config.ts`.
 - [ ] مرور فهرست درس‌های پیش‌فرض با یک کنکوری/مشاور (`src/db/subjects.ts`).
 - [x] آیکن اپ (طراحی شد).

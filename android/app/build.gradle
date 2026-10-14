@@ -103,7 +103,9 @@ android {
 
     namespace "com.tamarkoz"
     defaultConfig {
-        applicationId "com.tamarkoz"
+        // Store identity (Cafe Bazaar). Never change after the first upload. The code's own
+        // package/namespace stays com.tamarkoz — they are independent.
+        applicationId "com.rezaabaskhanian.tamarkoz"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
